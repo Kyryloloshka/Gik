@@ -12,6 +12,8 @@ pub enum GikError {
     Transaction(#[from] redb::TransactionError),
     #[error("Table error: {0}")]
     Table(#[from] redb::TableError),
+    #[error("Storage error: {0}")]
+    Storage(#[from] redb::StorageError),
     #[error("Commit error: {0}")]
     Commit(#[from] redb::CommitError),
     #[error("Serialization error: {0}")]

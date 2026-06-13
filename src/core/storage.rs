@@ -1,5 +1,5 @@
 use crate::error::Result;
-use redb::{Database, TableDefinition};
+use redb::{Database, TableDefinition, ReadableTable};
 use std::path::Path;
 
 pub const OBJECTS: TableDefinition<&[u8; 20], Vec<u8>> = TableDefinition::new("objects");
@@ -32,6 +32,12 @@ impl Storage {
         write_txn.commit()?;
         Ok(())
     }
+
+    pub fn contains_object(&self, hash: &[u8; 20]) -> Result<bool> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(OBJECTS)?;
+        Ok(table.get(hash)?.is_some())
+    }
 }
 
 #[cfg(test)]
@@ -50,5 +56,13 @@ mod tests {
         assert!(read_txn.open_table(HEADS).is_ok());
         assert!(read_txn.open_table(STAGE_INDEX).is_ok());
         assert!(read_txn.open_table(TRANSACTION_LOG).is_ok());
+    }
+
+    #[test]
+    fn test_storage_contains_object() {
+        let tmp_file = NamedTempFile::new().unwrap();
+        let storage = Storage::new(tmp_file.path()).unwrap();
+        let hash = [0u8; 20];
+        assert!(!storage.contains_object(&hash).unwrap());
     }
 }
