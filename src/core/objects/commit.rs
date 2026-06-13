@@ -2,16 +2,17 @@ use sha1::{Sha1, Digest};
 use std::io::{self, Write};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use crate::core::hash::Hash;
 
 /// Calculates the SHA1 hash of a commit in Git-canonical format
 pub fn hash_commit(
-    tree_hash: [u8; 20],
-    parent_hashes: &[[u8; 20]],
+    tree_hash: Hash,
+    parent_hashes: &[Hash],
     author: &str,
     email: &str,
     timestamp: u64,
     message: &str,
-) -> io::Result<[u8; 20]> {
+) -> io::Result<Hash> {
     let mut hasher = Sha1::new();
     let content = build_commit_content(tree_hash, parent_hashes, author, email, timestamp, message);
 
@@ -22,13 +23,13 @@ pub fn hash_commit(
     let result = hasher.finalize();
     let mut hash = [0u8; 20];
     hash.copy_from_slice(&result);
-    Ok(hash)
+    Ok(Hash(hash))
 }
 
 /// Compresses a commit object using Zlib
 pub fn compress_commit<W: Write>(
-    tree_hash: [u8; 20],
-    parent_hashes: &[[u8; 20]],
+    tree_hash: Hash,
+    parent_hashes: &[Hash],
     author: &str,
     email: &str,
     timestamp: u64,
@@ -47,16 +48,16 @@ pub fn compress_commit<W: Write>(
 }
 
 fn build_commit_content(
-    tree_hash: [u8; 20],
-    parent_hashes: &[[u8; 20]],
+    tree_hash: Hash,
+    parent_hashes: &[Hash],
     author: &str,
     email: &str,
     timestamp: u64,
     message: &str,
 ) -> String {
-    let mut content = format!("tree {}\n", hex::encode(tree_hash));
+    let mut content = format!("tree {}\n", hex::encode(tree_hash.0));
     for parent in parent_hashes {
-        content.push_str(&format!("parent {}\n", hex::encode(parent)));
+        content.push_str(&format!("parent {}\n", hex::encode(parent.0)));
     }
     content.push_str(&format!(
         "author {} <{}> {} +0000\n",

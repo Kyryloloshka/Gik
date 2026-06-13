@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
+use crate::core::hash::Hash;
 use std::fs::File;
 
 pub fn init() -> Result<()> {
@@ -30,10 +31,10 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-type StagedTreeResult = (Vec<(u32, String, [u8; 20])>, [u8; 20], Vec<u8>);
+type StagedTreeResult = (Vec<(u32, String, Hash)>, Hash, Vec<u8>);
 
 fn build_staged_tree(
-    staged_files: Vec<(String, [u8; 20])>,
+    staged_files: Vec<(String, Hash)>,
 ) -> crate::error::Result<StagedTreeResult> {
     let mut tree_entries = Vec::new();
     for (path, hash) in staged_files {

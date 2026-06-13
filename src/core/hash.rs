@@ -22,6 +22,12 @@ impl AsRef<[u8; 20]> for Hash {
     }
 }
 
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

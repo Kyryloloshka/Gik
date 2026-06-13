@@ -2,9 +2,10 @@ use sha1::{Sha1, Digest};
 use std::io::{self, Read, Write};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use crate::core::hash::Hash;
 
 /// Calculates the SHA1 hash of a blob in Git-canonical format: "blob [size]\0[content]"
-pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<[u8; 20]> {
+pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<Hash> {
     let mut hasher = Sha1::new();
 
     // Write header
@@ -22,7 +23,7 @@ pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<[u8; 20]> {
     let result = hasher.finalize();
     let mut hash = [0u8; 20];
     hash.copy_from_slice(&result);
-    Ok(hash)
+    Ok(Hash(hash))
 }
 
 /// Compresses a blob (including its Git header) using Zlib streaming compression
