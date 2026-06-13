@@ -3,6 +3,8 @@ use std::io::{self, Write};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
+pub const REGULAR_FILE_MODE: u32 = 0o100644;
+
 /// Calculates the SHA1 hash of a tree in Git-canonical format
 pub fn hash_tree(entries: &[(u32, String, [u8; 20])]) -> io::Result<[u8; 20]> {
     let mut hasher = Sha1::new();
