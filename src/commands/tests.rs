@@ -6,7 +6,7 @@ use std::fs::File;
 #[test]
 fn test_init_creates_db_file() {
     let dir = tempdir().unwrap();
-    let db_path = dir.path().join(".gik.db");
+    let db_path = dir.path().join(crate::config::DB_PATH);
 
     let original_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(dir.path()).unwrap();
@@ -36,7 +36,7 @@ fn test_stage_adds_file_to_storage() {
 
     stage(file_path.to_string()).unwrap();
 
-    let storage = Storage::new(".gik.db").unwrap();
+    let storage = Storage::new(crate::config::DB_PATH).unwrap();
     let hash_option = storage.get_staged_hash(file_path).unwrap();
     assert!(hash_option.is_some());
 
@@ -68,7 +68,7 @@ fn test_commit_creates_objects_and_updates_head() {
     commit("initial commit".to_string()).unwrap();
 
     let first_head_option = {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         let head = storage.get_current_head().unwrap();
         assert!(head.is_some());
 
@@ -88,7 +88,7 @@ fn test_commit_creates_objects_and_updates_head() {
     commit("second commit".to_string()).unwrap();
 
     let head2_option = {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         storage.get_current_head().unwrap()
     };
     assert!(head2_option.is_some());
@@ -140,12 +140,12 @@ fn test_undo_works() {
     // Undo staging
     stage(file_path.to_string()).unwrap();
     {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         assert!(storage.get_staged_hash(file_path).unwrap().is_some());
     }
     undo().unwrap();
     {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         assert!(storage.get_staged_hash(file_path).unwrap().is_none());
     }
 
@@ -153,14 +153,14 @@ fn test_undo_works() {
     stage(file_path.to_string()).unwrap();
     commit("initial commit".to_string()).unwrap();
     let first_head = {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         storage.get_current_head().unwrap()
     };
     assert!(first_head.is_some());
 
     undo().unwrap();
     {
-        let storage = Storage::new(".gik.db").unwrap();
+        let storage = Storage::new(crate::config::DB_PATH).unwrap();
         assert!(storage.get_current_head().unwrap().is_none());
     }
 

@@ -3,12 +3,12 @@ use crate::core::storage::Storage;
 use std::fs::File;
 
 pub fn init() -> Result<()> {
-    Storage::new(".gik.db")?;
+    Storage::new(crate::config::DB_PATH)?;
     Ok(())
 }
 
 pub fn stage(path: String) -> Result<()> {
-    let storage = Storage::new(".gik.db")?;
+    let storage = Storage::new(crate::config::DB_PATH)?;
     let file = File::open(&path)?;
     let metadata = file.metadata()?;
     let size = metadata.len();
@@ -24,7 +24,7 @@ pub fn stage(path: String) -> Result<()> {
 }
 
 pub fn commit(message: String) -> Result<()> {
-    let storage = Storage::new(".gik.db")?;
+    let storage = Storage::new(crate::config::DB_PATH)?;
 
     // 1. Get staged files
     let staged_files = storage.get_all_staged_files()?;
@@ -106,7 +106,7 @@ pub fn commit(message: String) -> Result<()> {
 }
 
 pub fn log() -> Result<()> {
-    let storage = Storage::new(".gik.db")?;
+    let storage = Storage::new(crate::config::DB_PATH)?;
     let mut current_hash = storage.get_current_head()?;
 
     if current_hash.is_none() {
@@ -138,7 +138,7 @@ pub fn log() -> Result<()> {
 }
 
 pub fn undo() -> Result<()> {
-    let storage = Storage::new(".gik.db")?;
+    let storage = Storage::new(crate::config::DB_PATH)?;
     
     if let Some(record) = storage.pop_last_transaction()? {
         storage.apply_undo(record.action)?;
