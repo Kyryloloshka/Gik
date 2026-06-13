@@ -96,3 +96,73 @@ fn test_commit_creates_objects_and_updates_head() {
 
     std::env::set_current_dir(original_dir).unwrap();
 }
+
+#[test]
+fn test_log_runs_successfully() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    init().unwrap();
+
+    // No commits yet
+    assert!(log().is_ok());
+
+    let file_path = "test.txt";
+    {
+        let mut file = File::create(file_path).unwrap();
+        file.write_all(b"hello world\n").unwrap();
+    }
+
+    stage(file_path.to_string()).unwrap();
+    commit("initial commit".to_string()).unwrap();
+
+    // One commit
+    assert!(log().is_ok());
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_undo_works() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    init().unwrap();
+
+    let file_path = "test.txt";
+    {
+        let mut file = File::create(file_path).unwrap();
+        file.write_all(b"hello world\n").unwrap();
+    }
+
+    // Undo staging
+    stage(file_path.to_string()).unwrap();
+    {
+        let storage = Storage::new(".gik.db").unwrap();
+        assert!(storage.get_staged_hash(file_path).unwrap().is_some());
+    }
+    undo().unwrap();
+    {
+        let storage = Storage::new(".gik.db").unwrap();
+        assert!(storage.get_staged_hash(file_path).unwrap().is_none());
+    }
+
+    // Undo commit
+    stage(file_path.to_string()).unwrap();
+    commit("initial commit".to_string()).unwrap();
+    let first_head = {
+        let storage = Storage::new(".gik.db").unwrap();
+        storage.get_current_head().unwrap()
+    };
+    assert!(first_head.is_some());
+
+    undo().unwrap();
+    {
+        let storage = Storage::new(".gik.db").unwrap();
+        assert!(storage.get_current_head().unwrap().is_none());
+    }
+
+    std::env::set_current_dir(original_dir).unwrap();
+}

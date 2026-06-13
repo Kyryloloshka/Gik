@@ -55,8 +55,9 @@ pub fn commit(message: String) -> Result<()> {
     };
 
     // 4. Create Commit object
-    let author = "Gik User";
-    let email = "user@gik.local";
+    let author_name = "Gik User";
+    let author_email = "user@gik.local";
+    let author = format!("{} <{}>", author_name, author_email);
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -65,8 +66,8 @@ pub fn commit(message: String) -> Result<()> {
     let commit_hash = crate::core::objects::hash_commit(
         tree_hash,
         &parent_hashes,
-        author,
-        email,
+        author_name,
+        author_email,
         timestamp,
         &message,
     )?;
@@ -74,20 +75,29 @@ pub fn commit(message: String) -> Result<()> {
     crate::core::objects::compress_commit(
         tree_hash,
         &parent_hashes,
-        author,
-        email,
+        author_name,
+        author_email,
         timestamp,
         &message,
         &mut commit_content,
     )?;
 
     // 5. Update Storage
+    let meta = crate::core::models::CommitMeta {
+        parent_hashes: parent_hashes.clone(),
+        tree_hash,
+        timestamp,
+        author,
+        message: message.clone(),
+    };
+
     storage.commit_transaction(
         tree_hash,
         tree_content,
         commit_hash,
         commit_content,
         parent_hash,
+        meta,
     )?;
 
     println!("[main {}] {}", &hex::encode(commit_hash)[..7], message);
@@ -96,12 +106,47 @@ pub fn commit(message: String) -> Result<()> {
 }
 
 pub fn log() -> Result<()> {
-    // Logic for gik log will go here
+    let storage = Storage::new(".gik.db")?;
+    let mut current_hash = storage.get_current_head()?;
+
+    if current_hash.is_none() {
+        println!("No commits yet");
+        return Ok(());
+    }
+
+    while let Some(hash) = current_hash {
+        if let Some(meta) = storage.get_commit_meta(&hash)? {
+            println!("commit {}", hex::encode(hash));
+            println!("Author: {}", meta.author);
+            
+            // Format date
+            let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
+                .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
+                .unwrap_or_else(|| "Unknown date".to_string());
+            println!("Date:   {}\n", datetime);
+            
+            println!("    {}\n", meta.message);
+
+            // Follow the first parent
+            current_hash = meta.parent_hashes.first().copied();
+        } else {
+            break;
+        }
+    }
+
     Ok(())
 }
 
 pub fn undo() -> Result<()> {
-    // Logic for gik undo will go here
+    let storage = Storage::new(".gik.db")?;
+    
+    if let Some(record) = storage.pop_last_transaction()? {
+        storage.apply_undo(record.action)?;
+        println!("Undo successful");
+    } else {
+        println!("No transactions to undo");
+    }
+
     Ok(())
 }
 
