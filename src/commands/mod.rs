@@ -23,6 +23,32 @@ pub fn stage(path: String) -> Result<()> {
     Ok(())
 }
 
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
+
+type StagedTreeResult = (Vec<(u32, String, [u8; 20])>, [u8; 20], Vec<u8>);
+
+fn build_staged_tree(
+    staged_files: Vec<(String, [u8; 20])>,
+) -> crate::error::Result<StagedTreeResult> {
+    let mut tree_entries = Vec::new();
+    for (path, hash) in staged_files {
+        tree_entries.push((crate::core::objects::tree::REGULAR_FILE_MODE, path, hash));
+    }
+    // Sort entries by name for canonical tree
+    tree_entries.sort_by(|a, b| a.1.cmp(&b.1));
+
+    let tree_hash = crate::core::objects::hash_tree(&tree_entries)?;
+    let mut tree_content = Vec::new();
+    crate::core::objects::compress_tree(&tree_entries, &mut tree_content)?;
+
+    Ok((tree_entries, tree_hash, tree_content))
+}
+
 pub fn commit(message: String) -> Result<()> {
     let storage = Storage::new(crate::config::DB_PATH)?;
 
@@ -34,17 +60,7 @@ pub fn commit(message: String) -> Result<()> {
     }
 
     // 2. Create Tree object
-    let mut tree_entries = Vec::new();
-    for (path, hash) in staged_files {
-        // Git mode 100644 for regular files
-        tree_entries.push((0o100644, path, hash));
-    }
-    // Sort entries by name for canonical tree
-    tree_entries.sort_by(|a, b| a.1.cmp(&b.1));
-
-    let tree_hash = crate::core::objects::hash_tree(&tree_entries)?;
-    let mut tree_content = Vec::new();
-    crate::core::objects::compress_tree(&tree_entries, &mut tree_content)?;
+    let (_tree_entries, tree_hash, tree_content) = build_staged_tree(staged_files)?;
 
     // 3. Get current HEAD (parent)
     let parent_hash = storage.get_current_head()?;
@@ -55,13 +71,10 @@ pub fn commit(message: String) -> Result<()> {
     };
 
     // 4. Create Commit object
-    let author_name = "Gik User";
-    let author_email = "user@gik.local";
+    let author_name = crate::config::DEFAULT_AUTHOR_NAME;
+    let author_email = crate::config::DEFAULT_AUTHOR_EMAIL;
     let author = format!("{} <{}>", author_name, author_email);
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = current_timestamp();
 
     let commit_hash = crate::core::objects::hash_commit(
         tree_hash,

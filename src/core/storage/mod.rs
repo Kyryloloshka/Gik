@@ -50,8 +50,7 @@ impl Storage {
         
         let next_id = table
             .iter()?
-            .rev()
-            .next()
+            .next_back()
             .transpose()?
             .map(|(id, _)| id.value() + 1)
             .unwrap_or(1);
