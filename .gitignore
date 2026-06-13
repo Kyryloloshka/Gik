@@ -1,0 +1,12 @@
+# Rust
+/target
+Cargo.lock
+
+# AI & Brainstorming (Gemini CLI / Superpowers)
+.superpowers/
+.gemini/
+docs/superpowers/
+MEMORY.md
+
+# Logs
+*.log
