@@ -23,8 +23,75 @@ pub fn stage(path: String) -> Result<()> {
     Ok(())
 }
 
-pub fn commit(_message: String) -> Result<()> {
-    // Logic for gik commit will go here
+pub fn commit(message: String) -> Result<()> {
+    let storage = Storage::new(".gik.db")?;
+    
+    // 1. Get staged files
+    let staged_files = storage.get_all_staged_files()?;
+    if staged_files.is_empty() {
+        println!("Nothing to commit");
+        return Ok(());
+    }
+
+    // 2. Create Tree object
+    let mut tree_entries = Vec::new();
+    for (path, hash) in staged_files {
+        // Git mode 100644 for regular files
+        tree_entries.push((0o100644, path, hash));
+    }
+    // Sort entries by name for canonical tree
+    tree_entries.sort_by(|a, b| a.1.cmp(&b.1));
+    
+    let tree_hash = crate::core::objects::hash_tree(&tree_entries)?;
+    let mut tree_content = Vec::new();
+    crate::core::objects::compress_tree(&tree_entries, &mut tree_content)?;
+
+    // 3. Get current HEAD (parent)
+    let parent_hash = storage.get_current_head()?;
+    let parent_hashes = if let Some(p) = parent_hash {
+        vec![p]
+    } else {
+        vec![]
+    };
+
+    // 4. Create Commit object
+    let author = "Gik User";
+    let email = "user@gik.local";
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let commit_hash = crate::core::objects::hash_commit(
+        tree_hash,
+        &parent_hashes,
+        author,
+        email,
+        timestamp,
+        &message,
+    )?;
+    let mut commit_content = Vec::new();
+    crate::core::objects::compress_commit(
+        tree_hash,
+        &parent_hashes,
+        author,
+        email,
+        timestamp,
+        &message,
+        &mut commit_content,
+    )?;
+
+    // 5. Update Storage
+    storage.commit_transaction(
+        tree_hash,
+        tree_content,
+        commit_hash,
+        commit_content,
+        parent_hash,
+    )?;
+
+    println!("[main {}] {}", hex::encode(&commit_hash)[..7].to_string(), message);
+    
     Ok(())
 }
 
@@ -91,6 +158,60 @@ mod tests {
         
         // Verify object is stored
         assert!(storage.contains_object(&hash.unwrap()).unwrap());
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_commit_creates_objects_and_updates_head() {
+        let dir = tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+        
+        init().unwrap();
+        
+        let file_path = "test.txt";
+        let content = "hello world\n";
+        {
+            let mut f = File::create(file_path).unwrap();
+            f.write_all(content.as_bytes()).unwrap();
+        }
+        
+        stage(file_path.to_string()).unwrap();
+        commit("initial commit".to_string()).unwrap();
+        
+        let first_head = {
+            let storage = Storage::new(".gik.db").unwrap();
+            
+            // Verify HEAD is updated
+            let head = storage.get_current_head().unwrap();
+            assert!(head.is_some());
+            
+            // Verify staged index is cleared
+            let staged = storage.get_all_staged_files().unwrap();
+            assert!(staged.is_empty());
+            
+            // Verify commit object exists
+            assert!(storage.contains_object(&head.unwrap()).unwrap());
+            head
+        };
+        
+        // Second commit
+        let file_path2 = "test2.txt";
+        {
+            let mut f = File::create(file_path2).unwrap();
+            f.write_all(b"second file\n").unwrap();
+        }
+        stage(file_path2.to_string()).unwrap();
+        commit("second commit".to_string()).unwrap();
+        
+        let head2 = {
+            let storage = Storage::new(".gik.db").unwrap();
+            storage.get_current_head().unwrap()
+        };
+        assert!(head2.is_some());
+        assert_ne!(first_head, head2);
         
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();

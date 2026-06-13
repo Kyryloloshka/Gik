@@ -40,6 +40,110 @@ pub fn compress_blob<R: Read, W: Write>(mut reader: R, size: u64, writer: W) -> 
     Ok(())
 }
 
+/// Calculates the SHA1 hash of a tree in Git-canonical format
+pub fn hash_tree(entries: &[(u32, String, [u8; 20])]) -> io::Result<[u8; 20]> {
+    let mut hasher = Sha1::new();
+    let content = build_tree_content(entries);
+    
+    let header = format!("tree {}\0", content.len());
+    hasher.update(header.as_bytes());
+    hasher.update(&content);
+    
+    let result = hasher.finalize();
+    let mut hash = [0u8; 20];
+    hash.copy_from_slice(&result);
+    Ok(hash)
+}
+
+/// Compresses a tree object using Zlib
+pub fn compress_tree<W: Write>(entries: &[(u32, String, [u8; 20])], writer: W) -> io::Result<()> {
+    let mut encoder = ZlibEncoder::new(writer, Compression::default());
+    let content = build_tree_content(entries);
+    
+    let header = format!("tree {}\0", content.len());
+    encoder.write_all(header.as_bytes())?;
+    encoder.write_all(&content)?;
+    
+    encoder.finish()?;
+    Ok(())
+}
+
+fn build_tree_content(entries: &[(u32, String, [u8; 20])]) -> Vec<u8> {
+    let mut content = Vec::new();
+    for (mode, name, hash) in entries {
+        content.extend_from_slice(format!("{:o} {}\0", mode, name).as_bytes());
+        content.extend_from_slice(hash);
+    }
+    content
+}
+
+/// Calculates the SHA1 hash of a commit in Git-canonical format
+pub fn hash_commit(
+    tree_hash: [u8; 20],
+    parent_hashes: &[[u8; 20]],
+    author: &str,
+    email: &str,
+    timestamp: u64,
+    message: &str,
+) -> io::Result<[u8; 20]> {
+    let mut hasher = Sha1::new();
+    let content = build_commit_content(tree_hash, parent_hashes, author, email, timestamp, message);
+    
+    let header = format!("commit {}\0", content.len());
+    hasher.update(header.as_bytes());
+    hasher.update(content.as_bytes());
+    
+    let result = hasher.finalize();
+    let mut hash = [0u8; 20];
+    hash.copy_from_slice(&result);
+    Ok(hash)
+}
+
+/// Compresses a commit object using Zlib
+pub fn compress_commit<W: Write>(
+    tree_hash: [u8; 20],
+    parent_hashes: &[[u8; 20]],
+    author: &str,
+    email: &str,
+    timestamp: u64,
+    message: &str,
+    writer: W,
+) -> io::Result<()> {
+    let mut encoder = ZlibEncoder::new(writer, Compression::default());
+    let content = build_commit_content(tree_hash, parent_hashes, author, email, timestamp, message);
+    
+    let header = format!("commit {}\0", content.len());
+    encoder.write_all(header.as_bytes())?;
+    encoder.write_all(content.as_bytes())?;
+    
+    encoder.finish()?;
+    Ok(())
+}
+
+fn build_commit_content(
+    tree_hash: [u8; 20],
+    parent_hashes: &[[u8; 20]],
+    author: &str,
+    email: &str,
+    timestamp: u64,
+    message: &str,
+) -> String {
+    let mut content = format!("tree {}\n", hex::encode(tree_hash));
+    for parent in parent_hashes {
+        content.push_str(&format!("parent {}\n", hex::encode(parent)));
+    }
+    content.push_str(&format!(
+        "author {} <{}> {} +0000\n",
+        author, email, timestamp
+    ));
+    content.push_str("\n");
+    content.push_str(message);
+    if !message.ends_with('\n') {
+        content.push('\n');
+    }
+    content
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
