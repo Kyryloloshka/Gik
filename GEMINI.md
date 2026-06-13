@@ -1,9 +1,14 @@
 # Gik Project Instructions & Conventions
 
 ## Architecture
-- **Layered Modularity**: Keep a clear separation between CLI, Business Logic (Commands), Core Objects (Git-standard), and Data Storage.
-- **Domain-Driven Storage**: Encapsulate `redb` details within the `storage` module. Higher-level logic should not touch raw table definitions.
+- **Layered Modularity**:
+  - `src/core/`: The "Engine". Contains `models`, `objects`, and `storage`. Exposes a clean API via `mod.rs` (facade pattern).
+  - `src/commands/`: Business logic. High-level orchestrators for CLI actions.
+  - `src/cli.rs`: CLI definition only.
+  - `src/error.rs`: Centralized error types.
+- **Domain-Driven Storage**: Encapsulate `redb` details within `src/core/storage.rs`. Higher-level logic (commands) must not touch raw table definitions.
 - **Service Pattern**: Use structs with methods for complex operations (e.g., `ObjectManager`, `CommitService`) to allow easier testing and state management.
+
 
 ## Coding Standards (Rust Best Practices)
 - **Error Handling**: 
