@@ -6,6 +6,14 @@ pub enum GikError {
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
     Db(#[from] redb::Error),
+    #[error("Database opening error: {0}")]
+    DbOpen(#[from] redb::DatabaseError),
+    #[error("Transaction error: {0}")]
+    Transaction(#[from] redb::TransactionError),
+    #[error("Table error: {0}")]
+    Table(#[from] redb::TableError),
+    #[error("Commit error: {0}")]
+    Commit(#[from] redb::CommitError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] bincode::Error),
     #[error("Invalid hash length")]
