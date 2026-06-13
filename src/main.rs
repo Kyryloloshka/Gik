@@ -1,5 +1,6 @@
 pub mod error;
 pub mod models;
+pub mod objects;
 pub mod storage;
 
 use error::Result;
