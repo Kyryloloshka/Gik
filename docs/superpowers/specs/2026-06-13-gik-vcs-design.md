@@ -14,12 +14,18 @@ The codebase will be a single Rust crate structured into logical modules to bala
 ## 3. Data Storage & Schema
 The embedded `redb` database utilizes the following tables:
 1. `OBJECTS`: Stores blob contents and commit objects (Key: SHA1, Value: zlib compressed bytes).
-2. `COMMITS_METADATA`: Stores structured commit information (`parent_hashes`, `tree_hash`, `timestamp`).
-3. `HEADS`: Tracks the active commit hashes (active branches/anonymous heads).
+2. `COMMITS_METADATA`: Stores structured commit information (`parent_hashes` as `Vec<[u8; 20]>`, `tree_hash`, `timestamp`).
+3. `HEADS`: Tracks the active commit hashes (active branches/anonymous heads). The system operates on anonymous heads to remain branch-agnostic at the core level.
 4. `STAGE_INDEX`: Maps file paths to their currently staged SHA1 hash.
 5. `TRANSACTION_LOG`: Auto-incrementing log of operations for the `undo` command.
 
-## 4. Data Flow & ACID Transactions
+## 4. Binary Formats & Git Compatibility
+To ensure future compatibility with `gix` and Git-protocol-based remotes:
+- **Canonical Formatting**: Blobs, Trees, and Commits MUST be formatted exactly as Git objects (including headers like `blob [size]\0`) before hashing and compression.
+- **Tree Objects**: Even though the MVP handles a flat file list, the `tree` object stored in `redb` must follow the Git tree format (mode, name, SHA1) so it can be exported later.
+- **Streaming IO**: Object processing (hashing, compression, DB writes) must use streaming interfaces (`std::io::Read`, `std::io::Write`) where possible to support large files without loading them entirely into memory.
+
+## 5. Data Flow & ACID Transactions
 All mutable operations (e.g., `commit`) are strictly atomic. 
 When `gik commit` is executed:
 1. An atomic `WriteTransaction` is opened via `redb`.
