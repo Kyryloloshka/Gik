@@ -5,6 +5,7 @@ Cargo.lock
 # AI & Brainstorming (Gemini CLI / Superpowers)
 .superpowers/
 .gemini/
+.worktrees/
 docs/superpowers/
 MEMORY.md
 
