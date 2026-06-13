@@ -136,8 +136,9 @@ fn build_commit_content(
         "author {} <{}> {} +0000\n",
         author, email, timestamp
     ));
-    content.push_str("\n");
+    content.push('\n');
     content.push_str(message);
+
     if !message.ends_with('\n') {
         content.push('\n');
     }

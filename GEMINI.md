@@ -27,8 +27,15 @@
 
 ## Naming Conventions
 - **Structs/Enums**: CamelCase (e.g., `CommitMeta`).
-- **Functions/Variables**: snake_case (e.g., `hash_blob`).
+- **Functions/Variables**: snake_case (e.g., `hash_blob`). 
+- **NO SINGLE-LETTER VARIABLES**: All variable names must be descriptive (e.g., use `index` instead of `i`, `reader` instead of `r`). Exceptions: standard loop iterators in very small scopes if absolutely necessary, but preferred to be descriptive even then.
 - **Traits**: Capable adjectives where possible (e.g., `ObjectReader`).
+
+## Modularity & File Size
+- **File Granularity**: If a file exceeds 200-300 lines or contains unrelated responsibilities, split it.
+- **Test Separation**: For large modules, move unit tests to a `tests` submodule in a separate file (e.g., `src/core/storage/tests.rs`) or use the `tests/` directory for integration tests.
+- **Avoid "God Files"**: No single file should handle both low-level DB access and high-level business logic.
+
 
 ## Documentation
 - Document public modules, structs, and functions with doc-comments (`///`).
