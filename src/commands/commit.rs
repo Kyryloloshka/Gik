@@ -28,9 +28,7 @@ fn build_staged_tree(
     Ok((tree_entries, tree_hash, tree_content))
 }
 
-pub fn commit(message: String) -> Result<()> {
-    let storage = Storage::new(crate::config::DB_PATH)?;
-
+pub fn commit(storage: &Storage, message: String) -> Result<()> {
     // 1. Get staged files
     let staged_files = storage.get_all_staged_files()?;
     if staged_files.is_empty() {

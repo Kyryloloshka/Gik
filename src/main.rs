@@ -14,19 +14,23 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init => {
-            commands::init()?;
+            commands::init(crate::config::DB_PATH)?;
         }
         Commands::Stage { path } => {
-            commands::stage(path)?;
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::stage(&storage, path)?;
         }
         Commands::Commit { message } => {
-            commands::commit(message)?;
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::commit(&storage, message)?;
         }
         Commands::Log => {
-            commands::log()?;
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::log(&storage)?;
         }
         Commands::Undo => {
-            commands::undo()?;
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::undo(&storage)?;
         }
     }
 

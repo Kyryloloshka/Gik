@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
 
-pub fn init() -> Result<()> {
-    Storage::new(crate::config::DB_PATH)?;
+pub fn init(db_path: &str) -> Result<()> {
+    Storage::new(db_path)?;
     Ok(())
 }

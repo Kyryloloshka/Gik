@@ -2,8 +2,7 @@ use crate::error::Result;
 use crate::core::storage::Storage;
 use std::fs::File;
 
-pub fn stage(path: String) -> Result<()> {
-    let storage = Storage::new(crate::config::DB_PATH)?;
+pub fn stage(storage: &Storage, path: String) -> Result<()> {
     let file = File::open(&path)?;
     let metadata = file.metadata()?;
     let size = metadata.len();

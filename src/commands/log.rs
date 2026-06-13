@@ -1,8 +1,7 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
 
-pub fn log() -> Result<()> {
-    let storage = Storage::new(crate::config::DB_PATH)?;
+pub fn log(storage: &Storage) -> Result<()> {
     let mut current_hash = storage.get_current_head()?;
 
     if current_hash.is_none() {
