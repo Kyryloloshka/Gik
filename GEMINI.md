@@ -33,7 +33,7 @@
 
 ## Modularity & File Size
 - **File Granularity**: If a file exceeds 200-300 lines or contains unrelated responsibilities, split it.
-- **Test Separation**: For large modules, move unit tests to a `tests` submodule in a separate file (e.g., `src/core/storage/tests.rs`) or use the `tests/` directory for integration tests.
+- **Test Separation**: For large modules, move unit tests to a dedicated `tests.rs` file within the module directory (e.g., `src/core/objects/tests.rs`). This keeps the module facade clean while maintaining easy access to internal logic for testing.
 - **Avoid "God Files"**: No single file should handle both low-level DB access and high-level business logic.
 
 
