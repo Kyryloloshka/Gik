@@ -61,7 +61,7 @@ jobs:
           name: artifacts-${{ matrix.target }}
           path: target/distrib/*
 
-  # 3. Collect everything and create the final GitHub Release
+  # 3. Collect everything and create the final GitHub Release via GH CLI
   publish:
     needs: [tagger, build]
     runs-on: ubuntu-latest
@@ -70,12 +70,19 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: target/distrib/
+          path: artifacts/
           pattern: artifacts-*
           merge-multiple: true
-      - name: Install cargo-dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
       - name: Create GitHub Release and Upload
-        run: cargo dist host --tag=${{ needs.tagger.outputs.tag }} --steps=create --steps=upload --allow-dirty
+        run: |
+          TAG=${{ needs.tagger.outputs.tag }}
+          # Check if release exists, if not create it
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Creating new release $TAG"
+            gh release create "$TAG" artifacts/* --title "$TAG" --notes "Gik Release $TAG"
+          else
+            echo "Release $TAG already exists, uploading assets"
+            gh release upload "$TAG" artifacts/* --clobber
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
