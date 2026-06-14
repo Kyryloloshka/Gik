@@ -30,10 +30,11 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
       - id: plan
         run: |
-          cargo dist plan --output-format=json > plan.json
+          cargo dist plan --tag=${{ github.ref_name }} --output-format=json > plan.json
           echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   # This job builds the binaries
   upload-artifacts:
