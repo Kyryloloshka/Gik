@@ -43,6 +43,10 @@ fn main() -> Result<()> {
         Commands::Update => {
             commands::update()?;
         }
+        Commands::Checkout { hash, force } => {
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::checkout(&storage, &hash, force)?;
+        }
     }
 
 
