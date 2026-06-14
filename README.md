@@ -64,3 +64,20 @@ The "Magic Button". Instantly rolls back the last staging or commit operation.
 ```bash
 gik undo
 ```
+
+## ⚖️ License
+Licensed under either of
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+at your option.
+
+## 🤝 Contributing
+
+Gik uses **Conventional Commits** for automated versioning and changelog generation. Please follow this format for your commit messages:
+
+- `feat: ...` for a new feature (triggers a **minor** version bump).
+- `fix: ...` for a bug fix (triggers a **patch** version bump).
+- `docs: ...` for documentation changes.
+- `chore: ...` for maintenance tasks.
+- `BREAKING CHANGE: ...` in the footer (triggers a **major** version bump).
+
