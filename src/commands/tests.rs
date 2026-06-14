@@ -71,7 +71,7 @@ fn test_commit_creates_objects_and_updates_head() {
         assert!(head.is_some());
 
         let staged = storage.index().get_all_staged_files().unwrap();
-        assert!(staged.is_empty());
+        assert_eq!(staged.len(), 1); // Index is now persistent
 
         assert!(storage.objects().contains_object(&head.unwrap()).unwrap());
         head
@@ -169,10 +169,10 @@ fn test_commit_auto_stages_files() {
     // Call commit WITHOUT staging manually
     commit(&storage, "auto commit".to_string(), false).unwrap();
 
-    // Verify file is indeed in the index (it was auto-staged and then cleared by commit)
+    // Verify file is indeed in the index (it was auto-staged and remains there)
 
     let staged_files = storage.index().get_all_staged_files().unwrap();
-    assert!(staged_files.is_empty());
+    assert_eq!(staged_files.len(), 1);
 
     let expected_blob_hash = Hash::from_hex(HELLO_HASH).unwrap();
     assert!(storage.objects().contains_object(&expected_blob_hash).unwrap());

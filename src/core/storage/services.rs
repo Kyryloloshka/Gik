@@ -162,15 +162,6 @@ impl<'a> CommitService<'a> {
             }
             heads.insert(&commit_hash.0, 1)?;
 
-            let mut index = write_txn.open_table(STAGE_INDEX)?;
-            let keys: Vec<String> = index
-                .iter()?
-                .map(|r| r.map(|(k, _)| k.value().to_string()))
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            for key in keys {
-                index.remove(key.as_str())?;
-            }
-
             log_transaction(&write_txn, crate::core::models::UndoAction::RevertCommit {
                 old_head: parent_hash,
                 new_head: commit_hash,

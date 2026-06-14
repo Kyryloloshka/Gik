@@ -82,9 +82,9 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
         }
     }
 
-    // 3. Untracked Files (Disk not in Index)
+    // 3. Untracked Files (Disk not in Index and not in HEAD)
     for path in disk_files.keys() {
-        if !index_files.contains_key(path) {
+        if !index_files.contains_key(path) && !head_files.contains_key(path) {
             status.untracked.push(path.clone());
         }
     }
