@@ -42,7 +42,7 @@ fn test_stage_adds_file_to_storage() {
     assert!(hash_option.is_some());
 
     let hash = hash_option.unwrap();
-    assert_eq!(hex::encode(hash), HELLO_HASH);
+    assert_eq!(hex::encode(hash.0), HELLO_HASH);
 
     assert!(storage.contains_object(&hash).unwrap());
 }
@@ -215,6 +215,48 @@ fn test_ignore_system_removes_from_index() {
 
     // 5. Verify HEAD is still empty (because nothing was committed)
     assert!(storage.get_current_head().unwrap().is_none());
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_recursive_tree_generation() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = ".gik_test.db";
+    init(db_path).unwrap();
+    let storage = Storage::new(db_path).unwrap();
+
+    // Create nested structure
+    let subdir_name = "subdir";
+    let nested_dir = dir.path().join(subdir_name);
+    std::fs::create_dir(&nested_dir).unwrap();
+    let file_path = nested_dir.join("test.txt");
+    {
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(b"nested content\n").unwrap();
+    }
+
+    // Commit everything
+    commit(&storage, "recursive commit".to_string(), false).unwrap();
+
+    let head = storage.get_current_head().unwrap().unwrap();
+    let commit_meta = storage.get_commit_meta(&head).unwrap().unwrap();
+    let root_tree_hash = commit_meta.tree_hash;
+
+    // Verify root tree is stored
+    assert!(storage.contains_object(&root_tree_hash).unwrap());
+
+    // Total objects should be: 
+    // 1 blob (test.txt)
+    // 1 tree (subdir)
+    // 1 tree (root)
+    // 1 commit
+    // Total = 4
+    let all_objects = storage.list_all_objects().unwrap();
+    assert_eq!(all_objects.len(), 4);
 
     std::env::set_current_dir(original_dir).unwrap();
 }

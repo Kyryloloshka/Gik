@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
-use crate::core::hash::Hash;
 
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
@@ -9,49 +8,33 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-type StagedTreeResult = (Vec<(u32, String, Hash)>, Hash, Vec<u8>);
-
-fn build_staged_tree(
-    staged_files: Vec<(String, Hash)>,
-) -> crate::error::Result<StagedTreeResult> {
-    let mut tree_entries = Vec::new();
-    for (path, hash) in staged_files {
-        tree_entries.push((crate::core::objects::tree::REGULAR_FILE_MODE, path, hash));
-    }
-    // Sort entries by name for canonical tree
-    tree_entries.sort_by(|a, b| a.1.cmp(&b.1));
-
-    let tree_hash = crate::core::objects::hash_tree(&tree_entries)?;
-    let mut tree_content = Vec::new();
-    crate::core::objects::compress_tree(&tree_entries, &mut tree_content)?;
-
-    Ok((tree_entries, tree_hash, tree_content))
-}
-
 pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
     let matcher = crate::core::ignore::IgnoreMatcher::new();
 
     if !staged {
-        for entry in std::fs::read_dir(".")? {
-            let entry = entry?;
-            let path = entry.path();
+        // Recursive auto-staging
+        let mut stack = vec![".".to_string()];
+        while let Some(current_dir) = stack.pop() {
+            for entry in std::fs::read_dir(&current_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                let path_str = path.to_str().unwrap_or("");
 
-            // Skip directories
-            if entry.file_type()?.is_dir() {
-                continue;
-            }
-
-            if let Some(name_str) = path.file_name().and_then(|n| n.to_str()) {
-                // Check against ignore matcher
-                if matcher.is_ignored(name_str) {
+                // Skip based on ignore matcher
+                if matcher.is_ignored(path_str) {
                     continue;
                 }
 
-                // Call stage function directly
-                crate::commands::stage::stage(storage, name_str.to_string())?;
+                if entry.file_type()?.is_dir() {
+                    stack.push(path_str.to_string());
+                } else {
+                    // It's a file, stage it
+                    crate::commands::stage::stage(storage, path_str.to_string())?;
+                }
             }
         }
     }
+
 
     // 1. Auto-remove files from index if they are now ignored
     let currently_staged = storage.get_all_staged_files()?;
@@ -69,10 +52,10 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         return Ok(());
     }
 
-    // 3. Create Tree object
-    let (_tree_entries, tree_hash, tree_content) = build_staged_tree(staged_files)?;
+    // 3. Create Tree object using core domain logic
+    let (tree_hash, tree_content) = crate::core::objects::tree::build_and_store_tree(staged_files)?;
 
-    // 3. Get current HEAD (parent)
+    // 4. Get current HEAD (parent)
     let parent_hash = storage.get_current_head()?;
     let parent_hashes = if let Some(p) = parent_hash {
         vec![p]
@@ -80,7 +63,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         vec![]
     };
 
-    // 4. Create Commit object
+    // 5. Create Commit object
     let author_name = crate::config::DEFAULT_AUTHOR_NAME;
     let author_email = crate::config::DEFAULT_AUTHOR_EMAIL;
     let author = format!("{} <{}>", author_name, author_email);
@@ -105,7 +88,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         &mut commit_content,
     )?;
 
-    // 5. Update Storage
+    // 6. Update Storage
     let meta = crate::core::models::CommitMeta {
         parent_hashes: parent_hashes.clone(),
         tree_hash,
@@ -123,7 +106,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         meta,
     )?;
 
-    println!("[main {}] {}", &hex::encode(commit_hash)[..7], message);
+    println!("[main {}] {}", &hex::encode(commit_hash.0)[..7], message);
 
     Ok(())
 }
