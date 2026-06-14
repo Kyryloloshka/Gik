@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::storage::Storage;
+use crate::core::hash::Hash;
 use tempfile::tempdir;
 use std::io::Write;
 use std::fs::File;
@@ -63,7 +64,7 @@ fn test_commit_creates_objects_and_updates_head() {
 
     let file_path_str = file_path.to_str().unwrap().to_string();
     stage(&storage, file_path_str).unwrap();
-    commit(&storage, "initial commit".to_string()).unwrap();
+    commit(&storage, "initial commit".to_string(), true).unwrap();
 
     let first_head_option = {
         let head = storage.get_current_head().unwrap();
@@ -83,7 +84,7 @@ fn test_commit_creates_objects_and_updates_head() {
     }
     let file_path2_str = file_path2.to_str().unwrap().to_string();
     stage(&storage, file_path2_str).unwrap();
-    commit(&storage, "second commit".to_string()).unwrap();
+    commit(&storage, "second commit".to_string(), true).unwrap();
 
     let head2_option = storage.get_current_head().unwrap();
     assert!(head2_option.is_some());
@@ -110,7 +111,7 @@ fn test_log_runs_successfully() {
 
     let file_path_str = file_path.to_str().unwrap().to_string();
     stage(&storage, file_path_str).unwrap();
-    commit(&storage, "initial commit".to_string()).unwrap();
+    commit(&storage, "initial commit".to_string(), true).unwrap();
 
     // One commit
     assert!(log(&storage).is_ok());
@@ -141,10 +142,44 @@ fn test_undo_works() {
 
     // Undo commit
     stage(&storage, file_path_str).unwrap();
-    commit(&storage, "initial commit".to_string()).unwrap();
+    commit(&storage, "initial commit".to_string(), true).unwrap();
     let first_head = storage.get_current_head().unwrap();
     assert!(first_head.is_some());
 
     undo(&storage).unwrap();
     assert!(storage.get_current_head().unwrap().is_none());
+}
+
+#[test]
+fn test_commit_auto_stages_files() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = ".gik_test.db";
+    init(db_path).unwrap();
+    let storage = Storage::new(db_path).unwrap();
+
+    let file_path = "test.txt";
+    let content = "hello world\n";
+    {
+        let mut file = File::create(file_path).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+    }
+
+    // Call commit WITHOUT staging manually
+    commit(&storage, "auto commit".to_string(), false).unwrap();
+
+    // Verify file is indeed in the index (it was auto-staged and then cleared by commit)
+
+    let staged_files = storage.get_all_staged_files().unwrap();
+    assert!(staged_files.is_empty());
+
+    let expected_blob_hash_hex = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
+    let expected_blob_hash = Hash::from_hex(expected_blob_hash_hex).unwrap();
+    assert!(storage.contains_object(&expected_blob_hash).unwrap());
+
+
+
+    std::env::set_current_dir(original_dir).unwrap();
 }

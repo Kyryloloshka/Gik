@@ -17,11 +17,14 @@ pub enum Commands {
         /// The path to the file to stage
         path: String,
     },
-    /// Commit staged changes
+    /// Commit changes
     Commit {
         /// The commit message
         #[arg(short, long)]
         message: String,
+        /// Only commit currently staged files
+        #[arg(long)]
+        staged: bool,
     },
     /// Show the commit log
     Log,
@@ -60,8 +63,9 @@ mod tests {
     fn test_parse_commit() {
         let cli = Cli::try_parse_from(&["gik", "commit", "-m", "hello"]).unwrap();
         match cli.command {
-            Commands::Commit { message } => {
+            Commands::Commit { message, staged } => {
                 assert_eq!(message, "hello");
+                assert!(!staged);
             }
             _ => panic!("Expected Commit command"),
         }

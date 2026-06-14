@@ -237,6 +237,16 @@ impl Storage {
         write_txn.commit()?;
         Ok(())
     }
+    pub fn list_all_objects(&self) -> Result<Vec<Hash>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(OBJECTS)?;
+        let mut hashes = Vec::new();
+        for result in table.iter()? {
+            let (hash_bytes, _) = result?;
+            hashes.push(Hash(*hash_bytes.value()));
+        }
+        Ok(hashes)
+    }
 }
 
 #[cfg(test)]

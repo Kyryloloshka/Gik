@@ -4,6 +4,14 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct Hash(pub [u8; 20]);
 
+impl Hash {
+    pub fn from_hex(s: &str) -> std::result::Result<Self, String> {
+        let bytes = hex::decode(s).map_err(|e| e.to_string())?;
+        let array: [u8; 20] = bytes.try_into().map_err(|_| "Invalid hash length".to_string())?;
+        Ok(Hash(array))
+    }
+}
+
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", hex::encode(self.0))
