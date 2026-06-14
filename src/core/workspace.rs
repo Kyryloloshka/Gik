@@ -96,21 +96,22 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
 fn get_disk_state() -> Result<HashMap<String, Hash>> {
     let mut disk_files = HashMap::new();
     let matcher = IgnoreMatcher::new();
-    let mut stack = vec![".".to_string()];
+    let root = std::env::current_dir()?;
+    let mut stack = vec![root.clone()];
 
     while let Some(current_dir) = stack.pop() {
         for entry in std::fs::read_dir(&current_dir)? {
             let entry = entry?;
             let path = entry.path();
 
-            let mut path_str = path.to_str().unwrap_or("").to_string();
-            if path_str.starts_with("./") || path_str.starts_with(".\\") {
-                path_str = path_str[2..].to_string();
-            } else if path_str == "." {
-                continue;
-            }
+            // Get path relative to the repository root
+            let relative_path = path.strip_prefix(&root)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            let path_str = relative_path.to_str().unwrap_or("");
+            
+            if path_str.is_empty() { continue; }
 
-            // Normalize separators to forward slashes
+            // Normalize separators to forward slashes for the ignore matcher
             let normalized_path = path_str.replace('\\', "/");
 
             if matcher.is_ignored(&normalized_path) {
@@ -118,7 +119,7 @@ fn get_disk_state() -> Result<HashMap<String, Hash>> {
             }
 
             if entry.file_type()?.is_dir() {
-                stack.push(path_str);
+                stack.push(path);
             } else {
                 let metadata = entry.metadata()?;
                 let file = std::fs::File::open(&path)?;
@@ -132,33 +133,38 @@ fn get_disk_state() -> Result<HashMap<String, Hash>> {
 }
 
 fn scan_and_stage(storage: &Storage, matcher: &IgnoreMatcher) -> Result<()> {
-    let mut stack = vec![".".to_string()];
+    let root = std::env::current_dir()?;
+    let mut stack = vec![root.clone()];
+    
     while let Some(current_dir) = stack.pop() {
         for entry in std::fs::read_dir(&current_dir)? {
             let entry = entry?;
             let path = entry.path();
             
-            // Get path relative to current directory, but strip "./" for matching
-            let mut path_str = path.to_str().unwrap_or("").to_string();
-            if path_str.starts_with("./") || path_str.starts_with(".\\") {
-                path_str = path_str[2..].to_string();
-            }
+            let relative_path = path.strip_prefix(&root)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            let path_str = relative_path.to_str().unwrap_or("");
             
-            // Skip based on ignore matcher
-            if matcher.is_ignored(&path_str) {
+            if path_str.is_empty() { continue; }
+            
+            // Normalize separators to forward slashes
+            let normalized_path = path_str.replace('\\', "/");
+            
+            if matcher.is_ignored(&normalized_path) {
                 continue;
             }
 
             if entry.file_type()?.is_dir() {
-                stack.push(path_str);
+                stack.push(path);
             } else {
                 // It's a file, stage it
-                crate::commands::stage::stage(storage, path_str)?;
+                crate::commands::stage::stage(storage, normalized_path)?;
             }
         }
     }
     Ok(())
 }
+
 
 fn remove_ignored_from_index(storage: &Storage, matcher: &IgnoreMatcher) -> Result<()> {
     let currently_staged = storage.index().get_all_staged_files()?;

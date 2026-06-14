@@ -52,21 +52,53 @@ pub fn build_and_store_tree(
     storage: &Storage,
     staged_files: Vec<(String, Hash)>,
 ) -> crate::error::Result<(Hash, Vec<u8>)> {
-    // 1. Group files by their top-level directory/file
+    let mut trees_to_store = Vec::new();
+    let (root_hash, root_content) = build_tree_recursive(staged_files, &mut trees_to_store)?;
+
+    // Store all trees in a single transaction
+    let write_txn = storage.repo.db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(crate::core::storage::repository::OBJECTS)?;
+        for (hash, content) in trees_to_store {
+            table.insert(&hash.0, content)?;
+        }
+        // Also insert the root tree
+        table.insert(&root_hash.0, root_content.clone())?;
+    }
+    write_txn.commit()?;
+
+    Ok((root_hash, root_content))
+}
+
+fn build_tree_recursive(
+    staged_files: Vec<(String, Hash)>,
+    trees_to_store: &mut Vec<(Hash, Vec<u8>)>,
+) -> crate::error::Result<(Hash, Vec<u8>)> {
     let mut tree_map: HashMap<String, Vec<(String, Hash)>> = HashMap::new();
-    let mut root_entries: Vec<(u32, String, Hash)> = Vec::new();
+    let mut entries: Vec<(u32, String, Hash)> = Vec::new();
 
     for (path, hash) in staged_files {
-        // Normalize path separators
         let normalized = path.replace('\\', "/");
         let parts: Vec<&str> = normalized.split('/').collect();
 
-        if parts.len() == 1 {
-            // Direct file in current level
-            root_entries.push((REGULAR_FILE_MODE, parts[0].to_string(), hash));
+        if parts.len() == 1 || (parts.len() == 2 && parts[1].is_empty()) {
+            // Direct file in current level (or trailing slash case)
+            let name = parts[0];
+            if !name.is_empty() {
+                entries.push((REGULAR_FILE_MODE, name.to_string(), hash));
+            }
         } else {
             // File in a subdirectory
             let dir_name = parts[0].to_string();
+            if dir_name.is_empty() {
+                // Handle leading slash/relative dot: skip it and treat as root
+                let remaining = parts[1..].join("/");
+                if !remaining.is_empty() {
+                    // Re-insert into the flat list for next iteration
+                    // Actually, we just need to avoid dir_name being empty.
+                }
+                continue;
+            }
             let remaining_path = parts[1..].join("/");
             tree_map.entry(dir_name).or_default().push((remaining_path, hash));
         }
@@ -74,28 +106,15 @@ pub fn build_and_store_tree(
 
     // 2. Recursively build sub-trees
     for (dir_name, sub_files) in tree_map {
-        let (sub_tree_hash, sub_tree_content) = build_and_store_tree(storage, sub_files)?;
-        
-        // Store the sub-tree object in the database
-        // We need a method in storage for this, or use raw access via facade if available
-        // For now, we'll assume we can use commit_transaction-like logic or add a new method.
-        // Let's use a simpler approach: return all created trees up to the caller.
-        // Actually, the easiest is to just write it to the DB here.
-        let write_txn = storage.repo.db.begin_write()?;
-        {
-            let mut table = write_txn.open_table(crate::core::storage::repository::OBJECTS)?;
-            table.insert(&sub_tree_hash.0, sub_tree_content)?;
-        }
-        write_txn.commit()?;
-
-        root_entries.push((DIRECTORY_MODE, dir_name, sub_tree_hash));
+        let (sub_tree_hash, sub_tree_content) = build_tree_recursive(sub_files, trees_to_store)?;
+        trees_to_store.push((sub_tree_hash, sub_tree_content));
+        entries.push((DIRECTORY_MODE, dir_name, sub_tree_hash));
     }
 
-    // 3. Finalize current tree
-    root_entries.sort_by(|a, b| a.1.cmp(&b.1));
-    let tree_hash = hash_tree(&root_entries)?;
+    entries.sort_by(|a, b| a.1.cmp(&b.1));
+    let tree_hash = hash_tree(&entries)?;
     let mut tree_content = Vec::new();
-    compress_tree(&root_entries, &mut tree_content)?;
+    compress_tree(&entries, &mut tree_content)?;
 
     Ok((tree_hash, tree_content))
 }
