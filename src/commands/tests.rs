@@ -183,3 +183,43 @@ fn test_commit_auto_stages_files() {
 
     std::env::set_current_dir(original_dir).unwrap();
 }
+
+#[test]
+fn test_ignore_system_removes_from_index() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = ".gik_test.db";
+    init(db_path).unwrap();
+    let storage = Storage::new(db_path).unwrap();
+
+    let file_path = "ignored_file.txt";
+    {
+        let mut file = File::create(file_path).unwrap();
+        file.write_all(b"to be ignored\n").unwrap();
+    }
+
+    // 1. Stage the file manually
+    stage(&storage, file_path.to_string()).unwrap();
+    assert!(storage.get_staged_hash(file_path).unwrap().is_some());
+
+    // 2. Add to .gik.ignore
+    {
+        let mut ignore_file = File::create(".gik.ignore").unwrap();
+        ignore_file.write_all(b"ignored_file.txt\n").unwrap();
+    }
+
+    // 3. Run commit. It should auto-remove the file from index.
+    commit(&storage, "commit with ignore".to_string(), true).unwrap();
+
+    // 4. Verify index is empty (because the only file was removed)
+    let staged = storage.get_all_staged_files().unwrap();
+    assert!(staged.is_empty());
+
+    // 5. Verify HEAD is still empty (because nothing was committed)
+    assert!(storage.get_current_head().unwrap().is_none());
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+

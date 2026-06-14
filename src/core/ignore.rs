@@ -1,6 +1,5 @@
 use glob::Pattern;
 use std::fs;
-use std::path::Path;
 
 pub struct IgnoreMatcher {
     patterns: Vec<Pattern>,
@@ -11,11 +10,15 @@ impl IgnoreMatcher {
         let mut patterns = Vec::new();
 
         // Hardcoded defaults
-        patterns.push(Pattern::new(".gik.db*").unwrap());
-        patterns.push(Pattern::new(".git*").unwrap());
-        patterns.push(Pattern::new("gik_test.db*").unwrap()); // For our tests
+        // Using more specific patterns to avoid over-matching (like .github)
+        patterns.push(Pattern::new(".gik.db").unwrap());
+        patterns.push(Pattern::new(".gik.db/**").unwrap());
+        patterns.push(Pattern::new(".git").unwrap());
+        patterns.push(Pattern::new(".git/**").unwrap());
+        patterns.push(Pattern::new(".gik_test.db*").unwrap()); // For our tests
 
         // Load from .gik.ignore
+
         if let Ok(content) = fs::read_to_string(".gik.ignore") {
             for line in content.lines() {
                 let trimmed = line.trim();
@@ -50,13 +53,10 @@ mod tests {
 
     #[test]
     fn test_default_ignores() {
-        let matcher = IgnoreMatcher { patterns: vec![
-            Pattern::new(".gik.db*").unwrap(),
-            Pattern::new(".git*").unwrap(),
-        ]};
+        let matcher = IgnoreMatcher::new();
         
         assert!(matcher.is_ignored(".gik.db"));
-        assert!(matcher.is_ignored(".gik.db-lock"));
+        assert!(matcher.is_ignored(".git"));
         assert!(matcher.is_ignored(".git/config"));
         assert!(!matcher.is_ignored("README.md"));
         assert!(!matcher.is_ignored(".github/workflows"));

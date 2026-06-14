@@ -98,6 +98,31 @@ impl Storage {
         Ok(())
     }
 
+    pub fn unstage_file(&self, path: &str) -> Result<()> {
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
+            let hash = {
+                if let Some(guard) = index.get(path)? {
+                    Some(Hash(*guard.value()))
+                } else {
+                    None
+                }
+            };
+
+            if let Some(h) = hash {
+                index.remove(path)?;
+                
+                self.log_transaction(&write_txn, crate::core::models::UndoAction::Stage {
+                    path: path.to_string(),
+                    hash: h,
+                })?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
     pub fn get_staged_hash(&self, path: &str) -> Result<Option<Hash>> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(STAGE_INDEX)?;
@@ -225,6 +250,10 @@ impl Storage {
                         index.remove(path.as_str())?;
                     }
                 }
+                crate::core::models::UndoAction::Stage { path, hash } => {
+                    let mut index = write_txn.open_table(STAGE_INDEX)?;
+                    index.insert(path.as_str(), &hash.0)?;
+                }
                 crate::core::models::UndoAction::RevertCommit { old_head, new_head } => {
                     let mut heads = write_txn.open_table(HEADS)?;
                     heads.remove(&new_head.0)?;
@@ -237,6 +266,7 @@ impl Storage {
         write_txn.commit()?;
         Ok(())
     }
+
     pub fn list_all_objects(&self) -> Result<Vec<Hash>> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(OBJECTS)?;

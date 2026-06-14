@@ -29,6 +29,8 @@ fn build_staged_tree(
 }
 
 pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
+    let matcher = crate::core::ignore::IgnoreMatcher::new();
+
     if !staged {
         for entry in std::fs::read_dir(".")? {
             let entry = entry?;
@@ -39,9 +41,9 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
                 continue;
             }
 
-            // Skip hidden files (like .gik.db, .git, etc.)
             if let Some(name_str) = path.file_name().and_then(|n| n.to_str()) {
-                if name_str.starts_with('.') {
+                // Check against ignore matcher
+                if matcher.is_ignored(name_str) {
                     continue;
                 }
 
@@ -51,14 +53,23 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         }
     }
 
-    // 1. Get staged files
+    // 1. Auto-remove files from index if they are now ignored
+    let currently_staged = storage.get_all_staged_files()?;
+    for (path, _) in currently_staged {
+        if matcher.is_ignored(&path) {
+            println!("Removing ignored file from index: {}", path);
+            storage.unstage_file(&path)?;
+        }
+    }
+
+    // 2. Get staged files
     let staged_files = storage.get_all_staged_files()?;
     if staged_files.is_empty() {
         println!("Nothing to commit");
         return Ok(());
     }
 
-    // 2. Create Tree object
+    // 3. Create Tree object
     let (_tree_entries, tree_hash, tree_content) = build_staged_tree(staged_files)?;
 
     // 3. Get current HEAD (parent)

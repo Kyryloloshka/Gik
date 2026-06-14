@@ -3,6 +3,12 @@ use crate::core::storage::Storage;
 use std::fs::File;
 
 pub fn stage(storage: &Storage, path: String) -> Result<()> {
+    let matcher = crate::core::ignore::IgnoreMatcher::new();
+    if matcher.is_ignored(&path) {
+        println!("Path '{}' is ignored by .gik.ignore", path);
+        return Ok(());
+    }
+
     let file = File::open(&path)?;
     let metadata = file.metadata()?;
     let size = metadata.len();
