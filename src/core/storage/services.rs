@@ -3,6 +3,7 @@ use crate::core::hash::Hash;
 use crate::core::storage::repository::*;
 use redb::ReadableTable;
 use std::io::Read;
+use std::collections::HashMap;
 
 // Internal helper for logging transactions
 pub(crate) fn log_transaction(
@@ -107,6 +108,27 @@ impl<'a> IndexService<'a> {
         }
         Ok(entries)
     }
+
+    pub fn set_index_state(&self, files: &HashMap<String, Hash>) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
+            let mut keys = Vec::new();
+            for result in index.iter()? {
+                let (path, _) = result?;
+                keys.push(path.value().to_string());
+            }
+            for key in keys {
+                index.remove(key.as_str())?;
+            }
+
+            for (path, hash) in files {
+                index.insert(path.as_str(), &hash.0)?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
 }
 
 pub struct CommitService<'a> {
@@ -166,6 +188,24 @@ impl<'a> CommitService<'a> {
                 old_head: parent_hash,
                 new_head: commit_hash,
             })?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    pub fn set_head(&self, new_head: &Hash) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut heads = write_txn.open_table(HEADS)?;
+            let mut keys = Vec::new();
+            for result in heads.iter()? {
+                let (hash, _) = result?;
+                keys.push(*hash.value());
+            }
+            for key in keys {
+                heads.remove(&key)?;
+            }
+            heads.insert(&new_head.0, 1)?;
         }
         write_txn.commit()?;
         Ok(())

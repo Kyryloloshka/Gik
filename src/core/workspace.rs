@@ -102,6 +102,45 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
     Ok(status)
 }
 
+/// Restores the workspace files from a specific commit.
+pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> {
+    // 1. Get commit meta
+    let meta = storage.commits().get_commit_meta(target_commit)?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Commit {} not found", target_commit)))?;
+
+    // 2. Get flat file map from target tree
+    let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
+
+    // 3. Clean current disk: remove files that are not in the target tree
+    let disk_files = get_disk_state()?;
+    for (path, _) in disk_files {
+        if !tree_files.contains_key(&path) {
+            if std::path::Path::new(&path).exists() {
+                std::fs::remove_file(&path)?;
+            }
+        }
+    }
+
+    // 4. Restore target files
+    for (path, hash) in tree_files {
+        let compressed_data = storage.objects().get_object(&hash)?
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Blob {} not found", hash)))?;
+        
+        let (_obj_type, _size, content) = crate::core::objects::decompress_object(&compressed_data[..])?;
+        
+        // Ensure parent directories exist
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        
+        std::fs::write(&path, content)?;
+    }
+
+    Ok(())
+}
+
 fn get_disk_state() -> Result<HashMap<String, Hash>> {
     let mut disk_files = HashMap::new();
     let matcher = IgnoreMatcher::new();

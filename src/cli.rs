@@ -40,6 +40,14 @@ pub enum Commands {
     },
     /// Update Gik to the latest version
     Update,
+    /// Restore the repository to a previous state
+    Checkout {
+        /// The commit hash to checkout
+        hash: String,
+        /// Force checkout even if there are uncommitted changes
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 
@@ -76,6 +84,18 @@ mod tests {
                 assert!(!staged);
             }
             _ => panic!("Expected Commit command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_checkout() {
+        let cli = Cli::try_parse_from(&["gik", "checkout", "abc1234", "--force"]).unwrap();
+        match cli.command {
+            Commands::Checkout { hash, force } => {
+                assert_eq!(hash, "abc1234");
+                assert!(force);
+            }
+            _ => panic!("Expected Checkout command"),
         }
     }
 }
