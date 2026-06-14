@@ -76,8 +76,8 @@ jobs:
       - name: Create GitHub Release and Upload
         run: |
           TAG=${{ needs.tagger.outputs.tag }}
-          # Collect all files into a flat list for uploading, avoiding directories
-          FILES=$(find artifacts -type f)
+          # Collect only files from the root level to avoid subdirectories and duplicates
+          FILES=$(find artifacts -maxdepth 1 -type f)
           
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             echo "Creating new release $TAG"
@@ -86,6 +86,7 @@ jobs:
             echo "Release $TAG already exists, uploading assets"
             gh release upload "$TAG" $FILES --clobber
           fi
+
 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
