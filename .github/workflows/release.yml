@@ -10,34 +10,21 @@ permissions:
   contents: write
 
 jobs:
-  publish:
-    name: Release for ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  # 1. Create the tag if it doesn't exist
+  tagger:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check-tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
-
-      - name: Get version
-        shell: bash
+      - id: check-tag
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -1 | cut -d '"' -f 2)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "TAG=v$VERSION" >> $GITHUB_ENV
-
-      - name: Auto Tag (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists."
-          else
-            echo "Creating new tag $TAG"
+          TAG="v$VERSION"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag "$TAG"
@@ -46,19 +33,49 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
+  # 2. Build binaries for each OS
+  build:
+    needs: tagger
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      
-      - name: Build and Upload
-        shell: bash
-        run: |
-          # Wait a few seconds for the tag to propagate in GitHub's internal systems
-          sleep 5
-          
-          # Build artifacts for this platform
-          cargo dist build --tag=$TAG --allow-dirty
-          
-          # Create release and upload artifacts (idempotent)
-          cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
+      - name: Build artifacts
+        run: cargo dist build --tag=${{ needs.tagger.outputs.tag }} --allow-dirty
+      - name: Upload artifacts to GH Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: target/distrib/*
+
+  # 3. Collect everything and create the final GitHub Release
+  publish:
+    needs: [tagger, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: target/distrib/
+          pattern: artifacts-*
+          merge-multiple: true
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Create GitHub Release and Upload
+        run: cargo dist host --tag=${{ needs.tagger.outputs.tag }} --steps=create --steps=upload --allow-dirty
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
