@@ -1,47 +1,30 @@
+# Official cargo-dist CI
 name: Release
+
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to release'
-        required: true
-        default: 'v0.1.15'
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and Release
+  # This single job will use the official cargo-dist action
+  # which handles everything: planning, building, and uploading.
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
-
-      - name: Install cargo-dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      
-      - name: Build and Host
-        shell: bash
-        run: |
-          # Determine the tag
-          TAG=${{ github.ref_name }}
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            TAG=${{ github.event.inputs.tag }}
-          fi
-          
-          # Force v0.1.15 if we are on main
-          if [ "$TAG" == "main" ]; then TAG="v0.1.15"; fi
-          
-          echo "Releasing tag: $TAG"
-          
-          # Run build and host in a single job for maximum reliability
-          cargo dist build --tag=$TAG --allow-dirty
-          cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
+      - name: cargo dist
+        # This is the "magic" action that replaces all our manual curl and build steps
+        uses: axodotdev/cargo-dist-project@main
+        with:
+          # We pass our required flags here
+          args: "--allow-dirty"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
