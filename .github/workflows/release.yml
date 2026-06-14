@@ -76,13 +76,16 @@ jobs:
       - name: Create GitHub Release and Upload
         run: |
           TAG=${{ needs.tagger.outputs.tag }}
-          # Check if release exists, if not create it
+          # Collect all files into a flat list for uploading, avoiding directories
+          FILES=$(find artifacts -type f)
+          
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             echo "Creating new release $TAG"
-            gh release create "$TAG" artifacts/* --title "$TAG" --notes "Gik Release $TAG"
+            gh release create "$TAG" $FILES --title "$TAG" --notes "Gik Release $TAG"
           else
             echo "Release $TAG already exists, uploading assets"
-            gh release upload "$TAG" artifacts/* --clobber
+            gh release upload "$TAG" $FILES --clobber
           fi
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
