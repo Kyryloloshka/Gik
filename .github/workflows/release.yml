@@ -1,30 +1,70 @@
-# Official cargo-dist CI
 name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
 jobs:
-  # This single job will use the official cargo-dist action
-  # which handles everything: planning, building, and uploading.
-  publish:
+  # Plan the release
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
-      - name: cargo dist
-        # This is the "magic" action that replaces all our manual curl and build steps
-        uses: axodotdev/cargo-dist-project@main
-        with:
-          # We pass our required flags here
-          args: "--allow-dirty"
+      - name: Install dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - id: plan
+        run: |
+          dist plan --tag=${{ github.ref_name }} --output-format=json > dist-manifest.json
+          echo "manifest=$(cat dist-manifest.json | jq -c .)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and Upload Artifacts
+  upload-artifacts:
+    needs: plan
+    strategy:
+      matrix:
+        # The matrix is computed dynamically by the plan step
+        include: ${{ fromJson(needs.plan.outputs.val).artifacts_matrix }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dist
+        run: ${{ matrix.install_dist }}
+      - name: Build artifacts
+        run: dist build --tag=${{ github.ref_name }} --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.runner }}
+          path: target/distrib/*
+
+  # Create the GitHub Release
+  publish-release:
+    needs: [plan, upload-artifacts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: target/distrib/
+          pattern: artifacts-*
+          merge-multiple: true
+      - name: Publish Release
+        run: dist host --steps=upload --tag=${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
