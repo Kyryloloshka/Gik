@@ -90,5 +90,6 @@ jobs:
             TAG=${{ github.event.inputs.tag }}
           fi
           cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
