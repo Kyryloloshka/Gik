@@ -32,7 +32,11 @@ fn main() -> Result<()> {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
             commands::undo(&storage)?;
         }
+        Commands::Update => {
+            commands::update()?;
+        }
     }
+
 
     Ok(())
 }
