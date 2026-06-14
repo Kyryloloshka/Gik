@@ -36,6 +36,10 @@ fn main() -> Result<()> {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
             commands::status(&storage)?;
         }
+        Commands::Diff { staged } => {
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::diff(&storage, staged)?;
+        }
         Commands::Update => {
             commands::update()?;
         }

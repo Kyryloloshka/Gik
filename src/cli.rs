@@ -32,6 +32,12 @@ pub enum Commands {
     Undo,
     /// Show the working tree status
     Status,
+    /// Show changes between commits, commit and working tree, etc
+    Diff {
+        /// Show changes in the stage
+        #[arg(long)]
+        staged: bool,
+    },
     /// Update Gik to the latest version
     Update,
 }
