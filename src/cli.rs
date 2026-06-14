@@ -27,7 +27,16 @@ pub enum Commands {
         staged: bool,
     },
     /// Show the commit log
-    Log,
+    Log {
+        /// Show all commits, not just ancestors of HEAD
+        #[arg(short, long)]
+        all: bool,
+    },
+    /// Restore working tree files
+    Restore {
+        /// Path to restore (use '.' for everything)
+        path: String,
+    },
     /// Undo the last commit
     Undo,
     /// Show the working tree status

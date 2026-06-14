@@ -24,9 +24,13 @@ fn main() -> Result<()> {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
             commands::commit(&storage, message, staged)?;
         }
-        Commands::Log => {
+        Commands::Log { all } => {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::log(&storage)?;
+            commands::log(&storage, all)?;
+        }
+        Commands::Restore { path } => {
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::restore(&storage, &path)?;
         }
         Commands::Undo => {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;

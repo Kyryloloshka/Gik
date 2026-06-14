@@ -10,11 +10,12 @@ pub struct CommitMeta {
     pub message: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum UndoAction {
     Unstage { path: String, old_hash: Option<Hash> },
     Stage { path: String, hash: Hash },
     RevertCommit { old_head: Option<Hash>, new_head: Hash },
+    Checkout { old_head: Option<Hash>, new_head: Hash },
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]

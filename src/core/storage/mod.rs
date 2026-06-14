@@ -36,7 +36,14 @@ impl Storage {
     pub fn refs(&self) -> RefService<'_> {
         RefService { repo: &self.repo }
     }
-}
+
+    pub fn log_transaction_manual(&self, action: crate::core::models::UndoAction) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        crate::core::storage::services::log_transaction(&write_txn, action)?;
+        write_txn.commit()?;
+        Ok(())
+    }
+    }
 
 #[cfg(test)]
 mod tests;

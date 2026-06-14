@@ -16,7 +16,7 @@ fn test_log_runs_successfully() {
     let storage = Storage::new(db_path).unwrap();
 
     // No commits yet
-    assert!(log(&storage).is_ok());
+    assert!(log(&storage, false).is_ok());
 
     let file_path = "test.txt";
     {
@@ -28,7 +28,7 @@ fn test_log_runs_successfully() {
     crate::commands::commit(&storage, "initial commit".to_string(), true).unwrap();
 
     // One commit
-    assert!(log(&storage).is_ok());
+    assert!(log(&storage, false).is_ok());
 
     std::env::set_current_dir(original_dir).unwrap();
 }

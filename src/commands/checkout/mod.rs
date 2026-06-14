@@ -8,10 +8,10 @@ use crate::core::workspace::{get_status, restore_workspace};
 mod tests;
 
 pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
-    println!("DEBUG: starting checkout for {}", hash);
+    let current_head = storage.commits().get_current_head()?;
+
     // 1. Safety Check: Check for uncommitted changes if force is false
     if !force {
-        println!("DEBUG: checking status");
         let status = get_status(storage)?;
         if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
             return Err(GikError::Io(std::io::Error::new(
@@ -22,13 +22,11 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     }
 
     // 2. Parse Hash: Support bookmark names and prefix matching
-    println!("DEBUG: parsing hash");
     let full_hash = if let Some(h) = storage.refs().get_ref(hash)? {
         h
     } else if hash.len() == 40 {
         Hash::from_hex(hash).map_err(|e| GikError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
     } else {
-        println!("DEBUG: listing all objects for prefix match");
         let all_objects = storage.objects().list_all_objects()?;
         let matches: Vec<Hash> = all_objects
             .into_iter()
@@ -49,22 +47,24 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
         }
         matches[0]
     };
-    println!("DEBUG: full_hash resolved to {}", full_hash);
 
     // 3. Ensure the found hash is a commit
-    println!("DEBUG: getting commit meta");
     let meta = storage.commits().get_commit_meta(&full_hash)?
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Object {} is not a commit", full_hash)))?;
 
     // 4. Restore Workspace
-    println!("DEBUG: restoring workspace");
     restore_workspace(storage, &full_hash)?;
 
     // 5. Update Index and HEAD
-    println!("DEBUG: updating index and head");
     let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
     storage.index().set_index_state(&tree_files)?;
     storage.commits().set_head(&full_hash)?;
+
+    // 6. Log transaction for undo
+    storage.log_transaction_manual(crate::core::models::UndoAction::Checkout {
+        old_head: current_head,
+        new_head: full_hash,
+    })?;
 
     println!("Switched to commit {}", full_hash);
     Ok(())

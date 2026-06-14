@@ -67,11 +67,13 @@ mod tests {
         let hash2 = storage.commits().get_current_head().unwrap().unwrap();
 
         // 4. Checkout "feature" by name
+        // Note: "feature" moved to hash2 because it pointed to hash1 (parent of hash2)
         crate::commands::checkout::checkout(&storage, "feature", false).expect("Checkout by bookmark name failed");
 
-        // 5. Assert "a.txt" is "v1"
-        assert_eq!(fs::read_to_string("a.txt").unwrap(), "v1");
-        assert_eq!(storage.commits().get_current_head().unwrap().unwrap(), hash1);
+        // 5. Assert "a.txt" is "v2" (because the bookmark moved forward!)
+        assert_eq!(fs::read_to_string("a.txt").unwrap(), "v2");
+        assert_eq!(storage.commits().get_current_head().unwrap().unwrap(), hash2);
+
 
         // 6. Checkout "feature" again (should still work)
         crate::commands::checkout::checkout(&storage, "feature", false).unwrap();

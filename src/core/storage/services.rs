@@ -6,7 +6,7 @@ use std::io::Read;
 use std::collections::HashMap;
 
 // Internal helper for logging transactions
-pub(crate) fn log_transaction(
+pub fn log_transaction(
     write_txn: &redb::WriteTransaction,
     action: crate::core::models::UndoAction,
 ) -> Result<()> {
@@ -265,6 +265,13 @@ impl<'a> UndoService<'a> {
                     index.insert(path.as_str(), &hash.0)?;
                 }
                 crate::core::models::UndoAction::RevertCommit { old_head, new_head } => {
+                    let mut heads = write_txn.open_table(HEADS)?;
+                    heads.remove(&new_head.0)?;
+                    if let Some(old) = old_head {
+                        heads.insert(&old.0, 1)?;
+                    }
+                }
+                crate::core::models::UndoAction::Checkout { old_head, new_head } => {
                     let mut heads = write_txn.open_table(HEADS)?;
                     heads.remove(&new_head.0)?;
                     if let Some(old) = old_head {
