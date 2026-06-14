@@ -33,7 +33,6 @@ jobs:
     needs: plan
     strategy:
       matrix:
-        # The matrix is computed dynamically by the plan step
         include: ${{ fromJson(needs.plan.outputs.val).artifacts_matrix }}
     runs-on: ${{ matrix.runner }}
     steps:
