@@ -9,16 +9,18 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
         return Ok(());
     }
 
-    let file = File::open(&path)?;
-    let metadata = file.metadata()?;
+    let hash = {
+        let file = File::open(&path)?;
+        let metadata = file.metadata()?;
+        let size = metadata.len();
+        crate::core::objects::hash_blob(&file, size)?
+    };
+
+    let metadata = std::fs::metadata(&path)?;
     let size = metadata.len();
-
-    // Hash
-    let hash = crate::core::objects::hash_blob(&file, size)?;
-
-    // Re-open for compression
     let file = File::open(&path)?;
     storage.stage_file(&path, &hash, size, file)?;
+
 
     Ok(())
 }

@@ -18,22 +18,28 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
             for entry in std::fs::read_dir(&current_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                let path_str = path.to_str().unwrap_or("");
-
+                
+                // Get path relative to current directory, but strip "./" for matching
+                let mut path_str = path.to_str().unwrap_or("").to_string();
+                if path_str.starts_with("./") || path_str.starts_with(".\\") {
+                    path_str = path_str[2..].to_string();
+                }
+                
                 // Skip based on ignore matcher
-                if matcher.is_ignored(path_str) {
+                if matcher.is_ignored(&path_str) {
                     continue;
                 }
 
                 if entry.file_type()?.is_dir() {
-                    stack.push(path_str.to_string());
+                    stack.push(path_str);
                 } else {
                     // It's a file, stage it
-                    crate::commands::stage::stage(storage, path_str.to_string())?;
+                    crate::commands::stage::stage(storage, path_str)?;
                 }
             }
         }
     }
+
 
 
     // 1. Auto-remove files from index if they are now ignored
