@@ -5,8 +5,12 @@ use tempfile::tempdir;
 use std::io::Write;
 use std::fs::File;
 
+const HELLO_CONTENT: &str = "hello world\n";
+const HELLO_HASH: &str = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
+
 #[test]
 fn test_init_creates_db_file() {
+
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("gik_test.db");
     let db_path_str = db_path.to_str().unwrap();

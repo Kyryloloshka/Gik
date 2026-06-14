@@ -11,11 +11,13 @@ impl IgnoreMatcher {
 
         // Hardcoded defaults
         // Using more specific patterns to avoid over-matching (like .github)
-        patterns.push(Pattern::new(".gik.db").unwrap());
-        patterns.push(Pattern::new(".gik.db/**").unwrap());
+        patterns.push(Pattern::new(crate::config::DB_PATH).unwrap());
+        let db_glob = format!("{}/**", crate::config::DB_PATH);
+        patterns.push(Pattern::new(&db_glob).unwrap());
         patterns.push(Pattern::new(".git").unwrap());
         patterns.push(Pattern::new(".git/**").unwrap());
         patterns.push(Pattern::new(".gik_test.db*").unwrap()); // For our tests
+
 
         // Load from .gik.ignore
 
