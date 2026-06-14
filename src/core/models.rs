@@ -23,6 +23,20 @@ pub struct TransactionRecord {
     pub action: UndoAction,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileState {
+    New,
+    Modified,
+    Deleted,
+}
+
+#[derive(Debug, Default)]
+pub struct RepoStatus {
+    pub staged: std::collections::HashMap<String, FileState>,
+    pub unstaged: std::collections::HashMap<String, FileState>,
+    pub untracked: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
