@@ -16,7 +16,7 @@ impl IgnoreMatcher {
         patterns.push(Pattern::new(&db_glob).unwrap());
         patterns.push(Pattern::new(".git").unwrap());
         patterns.push(Pattern::new(".git/**").unwrap());
-        patterns.push(Pattern::new(".gik_test.db*").unwrap()); // For our tests
+        patterns.push(Pattern::new("*gik_test.db*").unwrap()); // For our tests
 
 
         // Load from .gik.ignore
