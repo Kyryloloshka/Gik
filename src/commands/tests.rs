@@ -10,7 +10,6 @@ const HELLO_HASH: &str = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
 
 #[test]
 fn test_init_creates_db_file() {
-
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("gik_test.db");
     let db_path_str = db_path.to_str().unwrap();
@@ -31,10 +30,9 @@ fn test_stage_adds_file_to_storage() {
     let storage = Storage::new(db_path_str).unwrap();
 
     let file_path = dir.path().join("test.txt");
-    let content = "hello world\n";
     {
         let mut file = File::create(&file_path).unwrap();
-        file.write_all(content.as_bytes()).unwrap();
+        file.write_all(HELLO_CONTENT.as_bytes()).unwrap();
     }
 
     let file_path_str = file_path.to_str().unwrap().to_string();
@@ -44,8 +42,7 @@ fn test_stage_adds_file_to_storage() {
     assert!(hash_option.is_some());
 
     let hash = hash_option.unwrap();
-    let expected_hex = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
-    assert_eq!(hex::encode(hash), expected_hex);
+    assert_eq!(hex::encode(hash), HELLO_HASH);
 
     assert!(storage.contains_object(&hash).unwrap());
 }
@@ -60,10 +57,9 @@ fn test_commit_creates_objects_and_updates_head() {
     let storage = Storage::new(db_path_str).unwrap();
 
     let file_path = dir.path().join("test.txt");
-    let content = "hello world\n";
     {
         let mut file = File::create(&file_path).unwrap();
-        file.write_all(content.as_bytes()).unwrap();
+        file.write_all(HELLO_CONTENT.as_bytes()).unwrap();
     }
 
     let file_path_str = file_path.to_str().unwrap().to_string();
@@ -110,7 +106,7 @@ fn test_log_runs_successfully() {
     let file_path = dir.path().join("test.txt");
     {
         let mut file = File::create(&file_path).unwrap();
-        file.write_all(b"hello world\n").unwrap();
+        file.write_all(HELLO_CONTENT.as_bytes()).unwrap();
     }
 
     let file_path_str = file_path.to_str().unwrap().to_string();
@@ -133,7 +129,7 @@ fn test_undo_works() {
     let file_path = dir.path().join("test.txt");
     {
         let mut file = File::create(&file_path).unwrap();
-        file.write_all(b"hello world\n").unwrap();
+        file.write_all(HELLO_CONTENT.as_bytes()).unwrap();
     }
 
     let file_path_str = file_path.to_str().unwrap().to_string();
@@ -165,10 +161,9 @@ fn test_commit_auto_stages_files() {
     let storage = Storage::new(db_path).unwrap();
 
     let file_path = "test.txt";
-    let content = "hello world\n";
     {
         let mut file = File::create(file_path).unwrap();
-        file.write_all(content.as_bytes()).unwrap();
+        file.write_all(HELLO_CONTENT.as_bytes()).unwrap();
     }
 
     // Call commit WITHOUT staging manually
@@ -179,11 +174,8 @@ fn test_commit_auto_stages_files() {
     let staged_files = storage.get_all_staged_files().unwrap();
     assert!(staged_files.is_empty());
 
-    let expected_blob_hash_hex = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad";
-    let expected_blob_hash = Hash::from_hex(expected_blob_hash_hex).unwrap();
+    let expected_blob_hash = Hash::from_hex(HELLO_HASH).unwrap();
     assert!(storage.contains_object(&expected_blob_hash).unwrap());
-
-
 
     std::env::set_current_dir(original_dir).unwrap();
 }
@@ -226,4 +218,3 @@ fn test_ignore_system_removes_from_index() {
 
     std::env::set_current_dir(original_dir).unwrap();
 }
-

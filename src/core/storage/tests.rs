@@ -6,7 +6,7 @@ fn test_storage_init() {
     let tmp_file = NamedTempFile::new().unwrap();
     let storage = Storage::new(tmp_file.path()).unwrap();
 
-    let read_txn = storage.db.begin_read().unwrap();
+    let read_txn = storage.repo.db.begin_read().unwrap();
     assert!(read_txn.open_table(OBJECTS).is_ok());
     assert!(read_txn.open_table(COMMITS_METADATA).is_ok());
     assert!(read_txn.open_table(HEADS).is_ok());
@@ -34,7 +34,7 @@ fn test_storage_stage_file() {
     storage.stage_file(path, &hash, size, &content[..]).unwrap();
 
     // Verify STAGE_INDEX
-    let read_txn = storage.db.begin_read().unwrap();
+    let read_txn = storage.repo.db.begin_read().unwrap();
     let index = read_txn.open_table(STAGE_INDEX).unwrap();
     let staged_hash_guard = index.get(path).unwrap().unwrap();
     assert_eq!(staged_hash_guard.value(), &hash.0);
@@ -43,3 +43,4 @@ fn test_storage_stage_file() {
     let objects = read_txn.open_table(OBJECTS).unwrap();
     assert!(objects.get(&hash.0).unwrap().is_some());
 }
+

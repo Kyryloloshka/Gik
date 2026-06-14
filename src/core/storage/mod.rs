@@ -1,76 +1,47 @@
+pub mod repository;
+pub mod services;
+
 use crate::error::Result;
 use crate::core::hash::Hash;
-use redb::{Database, TableDefinition, ReadableTable};
+use self::repository::*;
+use self::services::*;
+use redb::ReadableTable;
 use std::path::Path;
 use std::io::Read;
 
-pub const OBJECTS: TableDefinition<&[u8; 20], Vec<u8>> = TableDefinition::new("objects");
-pub const COMMITS_METADATA: TableDefinition<&[u8; 20], Vec<u8>> = TableDefinition::new("commits_metadata");
-pub const HEADS: TableDefinition<&[u8; 20], u8> = TableDefinition::new("heads");
-pub const STAGE_INDEX: TableDefinition<&str, &[u8; 20]> = TableDefinition::new("stage_index");
-pub const TRANSACTION_LOG: TableDefinition<u64, Vec<u8>> = TableDefinition::new("transaction_log");
-
 pub struct Storage {
-    db: Database,
+    pub(crate) repo: Repository,
 }
 
 impl Storage {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = Database::create(path)?;
-        let storage = Self { db };
-        storage.init_tables()?;
-        Ok(storage)
+        let repo = Repository::new(path)?;
+        Ok(Self { repo })
     }
 
-    fn init_tables(&self) -> Result<()> {
-        let write_txn = self.db.begin_write()?;
-        {
-            let _ = write_txn.open_table(OBJECTS)?;
-            let _ = write_txn.open_table(COMMITS_METADATA)?;
-            let _ = write_txn.open_table(HEADS)?;
-            let _ = write_txn.open_table(STAGE_INDEX)?;
-            let _ = write_txn.open_table(TRANSACTION_LOG)?;
-        }
-        write_txn.commit()?;
-        Ok(())
+    // Services accessors
+    pub fn index(&self) -> IndexService<'_> {
+        IndexService { repo: &self.repo }
     }
 
+    pub fn commits(&self) -> CommitService<'_> {
+        CommitService { repo: &self.repo }
+    }
+
+    pub fn undo_service(&self) -> UndoService<'_> {
+        UndoService { repo: &self.repo }
+    }
+
+    // Facade methods for backward compatibility with commands
     pub fn contains_object(&self, hash: &Hash) -> Result<bool> {
-        let read_txn = self.db.begin_read()?;
+        let read_txn = self.repo.db.begin_read()?;
         let table = read_txn.open_table(OBJECTS)?;
         let exists = table.get(&hash.0)?.is_some();
         Ok(exists)
     }
 
-    fn log_transaction(
-        &self,
-        write_txn: &redb::WriteTransaction,
-        action: crate::core::models::UndoAction,
-    ) -> Result<()> {
-        let mut table = write_txn.open_table(TRANSACTION_LOG)?;
-        
-        let next_id = table
-            .iter()?
-            .next_back()
-            .transpose()?
-            .map(|(id, _)| id.value() + 1)
-            .unwrap_or(1);
-
-        let record = crate::core::models::TransactionRecord {
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-            action,
-        };
-
-        let bytes = bincode::serialize(&record)?;
-        table.insert(next_id, bytes)?;
-        Ok(())
-    }
-
     pub fn stage_file<R: Read>(&self, path: &str, hash: &Hash, size: u64, reader: R) -> Result<()> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.repo.db.begin_write()?;
         {
             let old_hash = {
                 let table = write_txn.open_table(STAGE_INDEX)?;
@@ -99,7 +70,7 @@ impl Storage {
     }
 
     pub fn unstage_file(&self, path: &str) -> Result<()> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.repo.db.begin_write()?;
         {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let hash = {
@@ -124,44 +95,19 @@ impl Storage {
     }
 
     pub fn get_staged_hash(&self, path: &str) -> Result<Option<Hash>> {
-        let read_txn = self.db.begin_read()?;
-        let table = read_txn.open_table(STAGE_INDEX)?;
-        let hash = table.get(path)?.map(|guard| Hash(*guard.value()));
-        Ok(hash)
+        self.index().get_staged_hash(path)
     }
 
     pub fn get_all_staged_files(&self) -> Result<Vec<(String, Hash)>> {
-        let read_txn = self.db.begin_read()?;
-        let table = read_txn.open_table(STAGE_INDEX)?;
-        let mut entries = Vec::new();
-        for result in table.iter()? {
-            let (path, hash) = result?;
-            entries.push((path.value().to_string(), Hash(*hash.value())));
-        }
-        Ok(entries)
+        self.index().get_all_staged_files()
     }
 
     pub fn get_current_head(&self) -> Result<Option<Hash>> {
-        let read_txn = self.db.begin_read()?;
-        let table = read_txn.open_table(HEADS)?;
-        let mut heads = Vec::new();
-        for result in table.iter()? {
-            let (hash, _) = result?;
-            heads.push(Hash(*hash.value()));
-        }
-        Ok(heads.first().copied())
+        self.commits().get_current_head()
     }
 
     pub fn get_commit_meta(&self, hash: &Hash) -> Result<Option<crate::core::models::CommitMeta>> {
-        let read_txn = self.db.begin_read()?;
-        let table = read_txn.open_table(COMMITS_METADATA)?;
-        let guard = table.get(&hash.0)?;
-        if let Some(g) = guard {
-            let meta = bincode::deserialize(&g.value())?;
-            Ok(Some(meta))
-        } else {
-            Ok(None)
-        }
+        self.commits().get_commit_meta(hash)
     }
 
     pub fn commit_transaction(
@@ -173,7 +119,7 @@ impl Storage {
         parent_hash: Option<Hash>,
         meta: crate::core::models::CommitMeta,
     ) -> Result<()> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.repo.db.begin_write()?;
         {
             let mut objects = write_txn.open_table(OBJECTS)?;
             objects.insert(&tree_hash.0, tree_content)?;
@@ -208,38 +154,11 @@ impl Storage {
     }
 
     pub fn pop_last_transaction(&self) -> Result<Option<crate::core::models::TransactionRecord>> {
-        let write_txn = self.db.begin_write()?;
-        let last_id = {
-            let table = write_txn.open_table(TRANSACTION_LOG)?;
-            let mut iter = table.iter()?;
-            let last = iter.next_back().transpose()?;
-            last.map(|(id, _)| id.value())
-        };
-
-        if let Some(id_val) = last_id {
-            let record = {
-                let table = write_txn.open_table(TRANSACTION_LOG)?;
-                let bytes = table.get(id_val)?;
-                if let Some(b) = bytes {
-                    bincode::deserialize(&b.value())?
-                } else {
-                    return Err(crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "Transaction log entry missing")));
-                }
-            };
-            {
-                let mut table = write_txn.open_table(TRANSACTION_LOG)?;
-                table.remove(id_val)?;
-            }
-            write_txn.commit()?;
-            Ok(Some(record))
-        } else {
-            write_txn.commit()?;
-            Ok(None)
-        }
+        self.undo_service().pop_last_transaction()
     }
 
     pub fn apply_undo(&self, action: crate::core::models::UndoAction) -> Result<()> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.repo.db.begin_write()?;
         {
             match action {
                 crate::core::models::UndoAction::Unstage { path, old_hash } => {
@@ -268,7 +187,7 @@ impl Storage {
     }
 
     pub fn list_all_objects(&self) -> Result<Vec<Hash>> {
-        let read_txn = self.db.begin_read()?;
+        let read_txn = self.repo.db.begin_read()?;
         let table = read_txn.open_table(OBJECTS)?;
         let mut hashes = Vec::new();
         for result in table.iter()? {
@@ -276,6 +195,34 @@ impl Storage {
             hashes.push(Hash(*hash_bytes.value()));
         }
         Ok(hashes)
+    }
+
+    // Internal helper used by multiple methods
+    fn log_transaction(
+        &self,
+        write_txn: &redb::WriteTransaction,
+        action: crate::core::models::UndoAction,
+    ) -> Result<()> {
+        let mut table = write_txn.open_table(TRANSACTION_LOG)?;
+        
+        let next_id = table
+            .iter()?
+            .next_back()
+            .transpose()?
+            .map(|(id, _)| id.value() + 1)
+            .unwrap_or(1);
+
+        let record = crate::core::models::TransactionRecord {
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            action,
+        };
+
+        let bytes = bincode::serialize(&record)?;
+        table.insert(next_id, bytes)?;
+        Ok(())
     }
 }
 
