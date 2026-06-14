@@ -38,13 +38,13 @@ fn test_stage_adds_file_to_storage() {
     let file_path_str = file_path.to_str().unwrap().to_string();
     stage(&storage, file_path_str.clone()).unwrap();
 
-    let hash_option = storage.get_staged_hash(&file_path_str).unwrap();
+    let hash_option = storage.index().get_staged_hash(&file_path_str).unwrap();
     assert!(hash_option.is_some());
 
     let hash = hash_option.unwrap();
     assert_eq!(hex::encode(hash.0), HELLO_HASH);
 
-    assert!(storage.contains_object(&hash).unwrap());
+    assert!(storage.objects().contains_object(&hash).unwrap());
 }
 
 #[test]
@@ -67,13 +67,13 @@ fn test_commit_creates_objects_and_updates_head() {
     commit(&storage, "initial commit".to_string(), true).unwrap();
 
     let first_head_option = {
-        let head = storage.get_current_head().unwrap();
+        let head = storage.commits().get_current_head().unwrap();
         assert!(head.is_some());
 
-        let staged = storage.get_all_staged_files().unwrap();
+        let staged = storage.index().get_all_staged_files().unwrap();
         assert!(staged.is_empty());
 
-        assert!(storage.contains_object(&head.unwrap()).unwrap());
+        assert!(storage.objects().contains_object(&head.unwrap()).unwrap());
         head
     };
 
@@ -86,7 +86,7 @@ fn test_commit_creates_objects_and_updates_head() {
     stage(&storage, file_path2_str).unwrap();
     commit(&storage, "second commit".to_string(), true).unwrap();
 
-    let head2_option = storage.get_current_head().unwrap();
+    let head2_option = storage.commits().get_current_head().unwrap();
     assert!(head2_option.is_some());
     assert_ne!(first_head_option, head2_option);
 }
@@ -136,18 +136,18 @@ fn test_undo_works() {
 
     // Undo staging
     stage(&storage, file_path_str.clone()).unwrap();
-    assert!(storage.get_staged_hash(&file_path_str).unwrap().is_some());
+    assert!(storage.index().get_staged_hash(&file_path_str).unwrap().is_some());
     undo(&storage).unwrap();
-    assert!(storage.get_staged_hash(&file_path_str).unwrap().is_none());
+    assert!(storage.index().get_staged_hash(&file_path_str).unwrap().is_none());
 
     // Undo commit
     stage(&storage, file_path_str).unwrap();
     commit(&storage, "initial commit".to_string(), true).unwrap();
-    let first_head = storage.get_current_head().unwrap();
+    let first_head = storage.commits().get_current_head().unwrap();
     assert!(first_head.is_some());
 
     undo(&storage).unwrap();
-    assert!(storage.get_current_head().unwrap().is_none());
+    assert!(storage.commits().get_current_head().unwrap().is_none());
 }
 
 #[test]
@@ -171,11 +171,11 @@ fn test_commit_auto_stages_files() {
 
     // Verify file is indeed in the index (it was auto-staged and then cleared by commit)
 
-    let staged_files = storage.get_all_staged_files().unwrap();
+    let staged_files = storage.index().get_all_staged_files().unwrap();
     assert!(staged_files.is_empty());
 
     let expected_blob_hash = Hash::from_hex(HELLO_HASH).unwrap();
-    assert!(storage.contains_object(&expected_blob_hash).unwrap());
+    assert!(storage.objects().contains_object(&expected_blob_hash).unwrap());
 
     std::env::set_current_dir(original_dir).unwrap();
 }
@@ -198,7 +198,7 @@ fn test_ignore_system_removes_from_index() {
 
     // 1. Stage the file manually
     stage(&storage, file_path.to_string()).unwrap();
-    assert!(storage.get_staged_hash(file_path).unwrap().is_some());
+    assert!(storage.index().get_staged_hash(file_path).unwrap().is_some());
 
     // 2. Add to .gik.ignore
     {
@@ -210,11 +210,11 @@ fn test_ignore_system_removes_from_index() {
     commit(&storage, "commit with ignore".to_string(), true).unwrap();
 
     // 4. Verify index is empty (because the only file was removed)
-    let staged = storage.get_all_staged_files().unwrap();
+    let staged = storage.index().get_all_staged_files().unwrap();
     assert!(staged.is_empty());
 
     // 5. Verify HEAD is still empty (because nothing was committed)
-    assert!(storage.get_current_head().unwrap().is_none());
+    assert!(storage.commits().get_current_head().unwrap().is_none());
 
     std::env::set_current_dir(original_dir).unwrap();
 }
@@ -242,12 +242,12 @@ fn test_recursive_tree_generation() {
     // Commit everything
     commit(&storage, "recursive commit".to_string(), false).unwrap();
 
-    let head = storage.get_current_head().unwrap().unwrap();
-    let commit_meta = storage.get_commit_meta(&head).unwrap().unwrap();
+    let head = storage.commits().get_current_head().unwrap().unwrap();
+    let commit_meta = storage.commits().get_commit_meta(&head).unwrap().unwrap();
     let root_tree_hash = commit_meta.tree_hash;
 
     // Verify root tree is stored
-    assert!(storage.contains_object(&root_tree_hash).unwrap());
+    assert!(storage.objects().contains_object(&root_tree_hash).unwrap());
 
     // Total objects should be: 
     // 1 blob (test.txt)
@@ -255,7 +255,7 @@ fn test_recursive_tree_generation() {
     // 1 tree (root)
     // 1 commit
     // Total = 4
-    let all_objects = storage.list_all_objects().unwrap();
+    let all_objects = storage.objects().list_all_objects().unwrap();
     assert_eq!(all_objects.len(), 4);
 
     std::env::set_current_dir(original_dir).unwrap();

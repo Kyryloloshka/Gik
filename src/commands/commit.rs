@@ -9,50 +9,14 @@ fn current_timestamp() -> u64 {
 }
 
 pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
-    let matcher = crate::core::ignore::IgnoreMatcher::new();
-
     if !staged {
-        // Recursive auto-staging
-        let mut stack = vec![".".to_string()];
-        while let Some(current_dir) = stack.pop() {
-            for entry in std::fs::read_dir(&current_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                
-                // Get path relative to current directory, but strip "./" for matching
-                let mut path_str = path.to_str().unwrap_or("").to_string();
-                if path_str.starts_with("./") || path_str.starts_with(".\\") {
-                    path_str = path_str[2..].to_string();
-                }
-                
-                // Skip based on ignore matcher
-                if matcher.is_ignored(&path_str) {
-                    continue;
-                }
-
-                if entry.file_type()?.is_dir() {
-                    stack.push(path_str);
-                } else {
-                    // It's a file, stage it
-                    crate::commands::stage::stage(storage, path_str)?;
-                }
-            }
-        }
+        crate::core::workspace::auto_stage(storage)?;
+    } else {
+        crate::core::workspace::clean_ignored_from_index(storage)?;
     }
 
-
-
-    // 1. Auto-remove files from index if they are now ignored
-    let currently_staged = storage.get_all_staged_files()?;
-    for (path, _) in currently_staged {
-        if matcher.is_ignored(&path) {
-            println!("Removing ignored file from index: {}", path);
-            storage.unstage_file(&path)?;
-        }
-    }
-
-    // 2. Get staged files
-    let staged_files = storage.get_all_staged_files()?;
+    // 1. Get staged files
+    let staged_files = storage.index().get_all_staged_files()?;
     if staged_files.is_empty() {
         println!("Nothing to commit");
         return Ok(());
@@ -62,7 +26,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
     let (tree_hash, tree_content) = crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
 
     // 4. Get current HEAD (parent)
-    let parent_hash = storage.get_current_head()?;
+    let parent_hash = storage.commits().get_current_head()?;
     let parent_hashes = if let Some(p) = parent_hash {
         vec![p]
     } else {
@@ -103,7 +67,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         message: message.clone(),
     };
 
-    storage.commit_transaction(
+    storage.commits().commit_transaction(
         tree_hash,
         tree_content,
         commit_hash,

@@ -19,7 +19,7 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
     let metadata = std::fs::metadata(&path)?;
     let size = metadata.len();
     let file = File::open(&path)?;
-    storage.stage_file(&path, &hash, size, file)?;
+    storage.index().stage_file(&path, &hash, size, file)?;
 
 
     Ok(())

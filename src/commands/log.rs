@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::core::storage::Storage;
 
 pub fn log(storage: &Storage) -> Result<()> {
-    let mut current_hash = storage.get_current_head()?;
+    let mut current_hash = storage.commits().get_current_head()?;
 
     if current_hash.is_none() {
         println!("No commits yet");
@@ -10,7 +10,7 @@ pub fn log(storage: &Storage) -> Result<()> {
     }
 
     while let Some(hash) = current_hash {
-        if let Some(meta) = storage.get_commit_meta(&hash)? {
+        if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
             println!("commit {}", hex::encode(hash));
             println!("Author: {}", meta.author);
             
