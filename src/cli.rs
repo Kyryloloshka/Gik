@@ -48,6 +48,14 @@ pub enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+    /// Manage bookmarks (branches)
+    Branch {
+        /// The name of the bookmark
+        name: Option<String>,
+        /// Delete the bookmark
+        #[arg(short, long)]
+        delete: bool,
+    },
 }
 
 

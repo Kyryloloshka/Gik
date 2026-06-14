@@ -7,6 +7,7 @@ pub mod status;
 pub mod undo;
 pub mod update;
 pub mod checkout;
+pub mod branch;
 
 pub use commit::commit;
 pub use diff::diff;
@@ -17,6 +18,7 @@ pub use status::status;
 pub use undo::undo;
 pub use update::update;
 pub use checkout::checkout;
+pub use branch::branch;
 
 #[cfg(test)]
 pub mod test_utils;

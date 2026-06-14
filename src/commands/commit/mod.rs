@@ -81,6 +81,20 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         meta,
     )?;
 
+    // 7. Move Bookmarks (Jujutsu-style)
+    let refs = storage.refs().list_refs()?;
+    if refs.is_empty() {
+        // First commit in the system, create 'main'
+        storage.refs().set_ref("main", &commit_hash)?;
+    } else if let Some(parent) = parent_hash {
+        // Move all bookmarks that were at the parent commit
+        for (name, hash) in refs {
+            if hash == parent {
+                storage.refs().set_ref(&name, &commit_hash)?;
+            }
+        }
+    }
+
     println!("[main {}] {}", &hex::encode(commit_hash.0)[..7], message);
 
     Ok(())

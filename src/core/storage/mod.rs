@@ -32,6 +32,10 @@ impl Storage {
     pub fn objects(&self) -> ObjectService<'_> {
         ObjectService { repo: &self.repo }
     }
+
+    pub fn refs(&self) -> RefService<'_> {
+        RefService { repo: &self.repo }
+    }
 }
 
 #[cfg(test)]

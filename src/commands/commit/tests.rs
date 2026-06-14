@@ -160,3 +160,70 @@ fn test_recursive_tree_generation() {
 
     std::env::set_current_dir(original_dir).unwrap();
 }
+
+#[test]
+fn test_first_commit_creates_main_bookmark() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = "gik_test_main.db";
+    {
+        let storage = Storage::new(db_path).unwrap();
+
+        let file_path = "test.txt";
+        {
+            let mut file = File::create(file_path).unwrap();
+            file.write_all(b"initial\n").unwrap();
+        }
+
+        commit(&storage, "initial commit".to_string(), false).unwrap();
+
+        let head = storage.commits().get_current_head().unwrap().unwrap();
+        let main_ref = storage.refs().get_ref("main").unwrap().expect("main ref should exist");
+        assert_eq!(head, main_ref);
+    }
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_commit_moves_bookmarks() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = "gik_test_move.db";
+    {
+        let storage = Storage::new(db_path).unwrap();
+
+        // 1. First commit
+        let file_path = "test.txt";
+        {
+            let mut file = File::create(file_path).unwrap();
+            file.write_all(b"initial\n").unwrap();
+        }
+        commit(&storage, "initial commit".to_string(), false).unwrap();
+        let head1 = storage.commits().get_current_head().unwrap().unwrap();
+
+        // Create a manual bookmark
+        storage.refs().set_ref("my-feature", &head1).unwrap();
+
+        // 2. Second commit
+        {
+            let mut file = File::create(file_path).unwrap();
+            file.write_all(b"modified\n").unwrap();
+        }
+        commit(&storage, "second commit".to_string(), false).unwrap();
+        let head2 = storage.commits().get_current_head().unwrap().unwrap();
+
+        // Both "main" and "my-feature" should have moved to head2
+        let main_ref = storage.refs().get_ref("main").unwrap().unwrap();
+        let feature_ref = storage.refs().get_ref("my-feature").unwrap().unwrap();
+
+        assert_eq!(main_ref, head2);
+        assert_eq!(feature_ref, head2);
+    }
+
+    std::env::set_current_dir(original_dir).unwrap();
+}

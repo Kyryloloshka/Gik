@@ -34,16 +34,53 @@ mod tests {
         assert_eq!(fs::read_to_string("a.txt").unwrap(), "v1");
         assert!(!std::path::Path::new("b.txt").exists(), "b.txt should not exist in commit 1");
 
-        // 4. Checkout hash2. Assert "a.txt" is "v2", "b.txt" exists.
+        // 4. Checkout hash2. Assert "a.txt" is "v2", b.txt exists.
         crate::commands::checkout::checkout(&storage, &hash2, false).expect("Checkout hash2 failed");
         assert_eq!(fs::read_to_string("a.txt").unwrap(), "v2");
         assert_eq!(fs::read_to_string("b.txt").unwrap(), "v1");
 
         std::env::set_current_dir(original_dir).unwrap();
-    }
+        }
 
-    #[test]
-    fn test_checkout_safety() {
+        #[test]
+        fn test_checkout_by_bookmark() {
+        let dir = tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let db_path = "gik_test_bookmark.db";
+        let storage = Storage::new(db_path).unwrap();
+
+        // 1. Create repo, file "a.txt" with "v1", commit.
+        fs::write("a.txt", "v1").unwrap();
+        stage(&storage, "a.txt".to_string()).unwrap();
+        commit(&storage, "commit 1".to_string(), true).unwrap();
+        let hash1 = storage.commits().get_current_head().unwrap().unwrap();
+
+        // 2. Create a bookmark "feature" at hash1
+        storage.refs().set_ref("feature", &hash1).unwrap();
+
+        // 3. Modify "a.txt" to "v2", commit (get hash2).
+        fs::write("a.txt", "v2").unwrap();
+        stage(&storage, "a.txt".to_string()).unwrap();
+        commit(&storage, "commit 2".to_string(), true).unwrap();
+        let hash2 = storage.commits().get_current_head().unwrap().unwrap();
+
+        // 4. Checkout "feature" by name
+        crate::commands::checkout::checkout(&storage, "feature", false).expect("Checkout by bookmark name failed");
+
+        // 5. Assert "a.txt" is "v1"
+        assert_eq!(fs::read_to_string("a.txt").unwrap(), "v1");
+        assert_eq!(storage.commits().get_current_head().unwrap().unwrap(), hash1);
+
+        // 6. Checkout "feature" again (should still work)
+        crate::commands::checkout::checkout(&storage, "feature", false).unwrap();
+
+        std::env::set_current_dir(original_dir).unwrap();
+        }
+
+        #[test]
+        fn test_checkout_safety() {
         let dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(dir.path()).unwrap();

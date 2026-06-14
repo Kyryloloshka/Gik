@@ -47,6 +47,10 @@ fn main() -> Result<()> {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
             commands::checkout(&storage, &hash, force)?;
         }
+        Commands::Branch { name, delete } => {
+            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            commands::branch(&storage, name, delete)?;
+        }
     }
 
 
