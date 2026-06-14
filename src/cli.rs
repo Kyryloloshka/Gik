@@ -30,6 +30,8 @@ pub enum Commands {
     Log,
     /// Undo the last commit
     Undo,
+    /// Show the working tree status
+    Status,
     /// Update Gik to the latest version
     Update,
 }
