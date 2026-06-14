@@ -25,7 +25,7 @@ fn test_log_runs_successfully() {
     }
 
     crate::commands::stage(&storage, file_path.to_string()).unwrap();
-    crate::commands::commit(&storage, "initial commit".to_string(), true).unwrap();
+    crate::commands::commit(&storage, "initial commit".to_string(), true, None).unwrap();
 
     // One commit
     assert!(log(&storage, false).is_ok());

@@ -6,9 +6,14 @@ use colored::*;
 /// Show the working tree status
 pub fn status(storage: &Storage) -> Result<()> {
     let repo_status = crate::core::workspace::get_status(storage)?;
+    let current_bookmark = storage.session().get_current_bookmark()?;
 
     // Presentation
-    println!("On branch main"); // Hardcoded for now as Gik doesn't have branches yet
+    if let Some(name) = current_bookmark {
+        println!("On bookmark: {}", name.green().bold());
+    } else {
+        println!("On anonymous commit");
+    }
 
     if repo_status.staged.is_empty() && repo_status.unstaged.is_empty() && repo_status.untracked.is_empty() {
         println!("nothing to commit, working tree clean");

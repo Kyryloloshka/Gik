@@ -50,7 +50,7 @@ fn test_diff_staged() {
         file.write_all(b"line 1\n").unwrap();
     }
 
-    crate::commands::commit(&storage, "initial".to_string(), false).unwrap();
+    crate::commands::commit(&storage, "initial".to_string(), false, None).unwrap();
 
     // Stage a modification
     {

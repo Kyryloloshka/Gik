@@ -18,7 +18,7 @@ mod tests {
         // 1. Create repo, file "a.txt" with "v1", commit (get hash1).
         fs::write("a.txt", "v1").unwrap();
         stage(&storage, "a.txt".to_string()).unwrap();
-        commit(&storage, "commit 1".to_string(), true).unwrap();
+        commit(&storage, "commit 1".to_string(), true, None).unwrap();
         let hash1 = storage.commits().get_current_head().unwrap().unwrap().to_string();
 
         // 2. Modify "a.txt" to "v2", create "b.txt", commit (get hash2).
@@ -26,7 +26,7 @@ mod tests {
         fs::write("b.txt", "v1").unwrap();
         stage(&storage, "a.txt".to_string()).unwrap();
         stage(&storage, "b.txt".to_string()).unwrap();
-        commit(&storage, "commit 2".to_string(), true).unwrap();
+        commit(&storage, "commit 2".to_string(), true, None).unwrap();
         let hash2 = storage.commits().get_current_head().unwrap().unwrap().to_string();
 
         // 3. Checkout hash1. Assert "a.txt" is "v1", "b.txt" does not exist.
@@ -54,25 +54,28 @@ mod tests {
         // 1. Create repo, file "a.txt" with "v1", commit.
         fs::write("a.txt", "v1").unwrap();
         stage(&storage, "a.txt".to_string()).unwrap();
-        commit(&storage, "commit 1".to_string(), true).unwrap();
+        commit(&storage, "commit 1".to_string(), true, None).unwrap();
         let hash1 = storage.commits().get_current_head().unwrap().unwrap();
 
         // 2. Create a bookmark "feature" at hash1
         storage.refs().set_ref("feature", &hash1).unwrap();
+        // Set hint to feature
+        crate::commands::checkout::checkout(&storage, "feature", false).unwrap();
 
         // 3. Modify "a.txt" to "v2", commit (get hash2).
         fs::write("a.txt", "v2").unwrap();
         stage(&storage, "a.txt".to_string()).unwrap();
-        commit(&storage, "commit 2".to_string(), true).unwrap();
+        commit(&storage, "commit 2".to_string(), true, None).unwrap();
         let hash2 = storage.commits().get_current_head().unwrap().unwrap();
 
         // 4. Checkout "feature" by name
-        // Note: "feature" moved to hash2 because it pointed to hash1 (parent of hash2)
+        // Now "feature" should have moved to hash2 because it was the hint!
         crate::commands::checkout::checkout(&storage, "feature", false).expect("Checkout by bookmark name failed");
 
-        // 5. Assert "a.txt" is "v2" (because the bookmark moved forward!)
+        // 5. Assert "a.txt" is "v2"
         assert_eq!(fs::read_to_string("a.txt").unwrap(), "v2");
         assert_eq!(storage.commits().get_current_head().unwrap().unwrap(), hash2);
+
 
 
         // 6. Checkout "feature" again (should still work)
@@ -93,13 +96,13 @@ mod tests {
         // 1. Create repo, commit a file.
         fs::write("file.txt", "v1").unwrap();
         stage(&storage, "file.txt".to_string()).unwrap();
-        commit(&storage, "initial commit".to_string(), true).unwrap();
+        commit(&storage, "initial commit".to_string(), true, None).unwrap();
         let hash1 = storage.commits().get_current_head().unwrap().unwrap().to_string();
 
         // Create another commit so we have something to checkout FROM
         fs::write("file.txt", "v2").unwrap();
         stage(&storage, "file.txt".to_string()).unwrap();
-        commit(&storage, "second commit".to_string(), true).unwrap();
+        commit(&storage, "second commit".to_string(), true, None).unwrap();
 
         // 2. Modify file on disk (unstaged change).
         fs::write("file.txt", "v2 modified").unwrap();

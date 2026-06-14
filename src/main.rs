@@ -20,9 +20,9 @@ fn main() -> Result<()> {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
             commands::stage(&storage, path)?;
         }
-        Commands::Commit { message, staged } => {
+        Commands::Commit { message, staged, branch } => {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::commit(&storage, message, staged)?;
+            commands::commit(&storage, message, staged, branch)?;
         }
         Commands::Log { all } => {
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;

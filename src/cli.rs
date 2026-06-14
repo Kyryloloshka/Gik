@@ -25,6 +25,9 @@ pub enum Commands {
         /// Only commit currently staged files
         #[arg(long)]
         staged: bool,
+        /// Explicitly move or create a bookmark
+        #[arg(short, long)]
+        branch: Option<String>,
     },
     /// Show the commit log
     Log {
@@ -96,9 +99,10 @@ mod tests {
     fn test_parse_commit() {
         let cli = Cli::try_parse_from(&["gik", "commit", "-m", "hello"]).unwrap();
         match cli.command {
-            Commands::Commit { message, staged } => {
+            Commands::Commit { message, staged, branch } => {
                 assert_eq!(message, "hello");
                 assert!(!staged);
+                assert!(branch.is_none());
             }
             _ => panic!("Expected Commit command"),
         }

@@ -22,7 +22,9 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     }
 
     // 2. Parse Hash: Support bookmark names and prefix matching
+    let mut resolved_bookmark = None;
     let full_hash = if let Some(h) = storage.refs().get_ref(hash)? {
+        resolved_bookmark = Some(hash.to_string());
         h
     } else if hash.len() == 40 {
         Hash::from_hex(hash).map_err(|e| GikError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
@@ -60,7 +62,14 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     storage.index().set_index_state(&tree_files)?;
     storage.commits().set_head(&full_hash)?;
 
-    // 6. Log transaction for undo
+    // 6. Update Session Hint
+    if let Some(name) = resolved_bookmark {
+        storage.session().set_current_bookmark(&name)?;
+    } else {
+        storage.session().clear_current_bookmark()?;
+    }
+
+    // 7. Log transaction for undo
     storage.log_transaction_manual(crate::core::models::UndoAction::Checkout {
         old_head: current_head,
         new_head: full_hash,

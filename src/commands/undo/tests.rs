@@ -28,7 +28,7 @@ fn test_undo_works() {
 
     // Undo commit
     crate::commands::stage(&storage, file_path.to_string()).unwrap();
-    crate::commands::commit(&storage, "initial commit".to_string(), true).unwrap();
+    crate::commands::commit(&storage, "initial commit".to_string(), true, None).unwrap();
     let first_head = storage.commits().get_current_head().unwrap();
     assert!(first_head.is_some());
 

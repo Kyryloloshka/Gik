@@ -37,7 +37,7 @@ fn test_status_basic() {
     assert!(status(&storage).is_ok());
 
     // 5. Committed state
-    crate::commands::commit(&storage, "commit file".to_string(), true).unwrap();
+    crate::commands::commit(&storage, "commit file".to_string(), true, None).unwrap();
     assert!(status(&storage).is_ok());
 
     std::env::set_current_dir(original_dir).unwrap();

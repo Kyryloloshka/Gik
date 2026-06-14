@@ -16,7 +16,7 @@ fn test_restore_file() {
     // 1. Create and commit a file
     fs::write("a.txt", "v1").unwrap();
     crate::commands::stage(&storage, "a.txt".to_string()).unwrap();
-    crate::commands::commit(&storage, "initial".to_string(), true).unwrap();
+    crate::commands::commit(&storage, "initial".to_string(), true, None).unwrap();
 
     // 2. Modify on disk
     fs::write("a.txt", "v2").unwrap();
@@ -43,7 +43,7 @@ fn test_restore_dot() {
     fs::write("a.txt", "v1").unwrap();
     fs::write("b.txt", "v1").unwrap();
     crate::commands::stage(&storage, ".".to_string()).unwrap();
-    crate::commands::commit(&storage, "initial".to_string(), true).unwrap();
+    crate::commands::commit(&storage, "initial".to_string(), true, None).unwrap();
 
     // 2. Modify and delete
     fs::write("a.txt", "v2").unwrap();

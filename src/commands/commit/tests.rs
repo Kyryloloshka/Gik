@@ -23,7 +23,7 @@ fn test_commit_creates_objects_and_updates_head() {
     }
 
     crate::commands::stage(&storage, file_path.to_string()).unwrap();
-    commit(&storage, "initial commit".to_string(), true).unwrap();
+    commit(&storage, "initial commit".to_string(), true, None).unwrap();
 
     let first_head_option = {
         let head = storage.commits().get_current_head().unwrap();
@@ -42,7 +42,7 @@ fn test_commit_creates_objects_and_updates_head() {
         file.write_all(b"second file\n").unwrap();
     }
     crate::commands::stage(&storage, file_path2.to_string()).unwrap();
-    commit(&storage, "second commit".to_string(), true).unwrap();
+    commit(&storage, "second commit".to_string(), true, None).unwrap();
 
     let head2_option = storage.commits().get_current_head().unwrap();
     assert!(head2_option.is_some());
@@ -68,7 +68,7 @@ fn test_commit_auto_stages_files() {
     }
 
     // Call commit WITHOUT staging manually
-    commit(&storage, "auto commit".to_string(), false).unwrap();
+    commit(&storage, "auto commit".to_string(), false, None).unwrap();
 
     // Verify file is indeed in the index (it was auto-staged and remains there)
     let staged_files = storage.index().get_all_staged_files().unwrap();
@@ -107,7 +107,7 @@ fn test_ignore_system_removes_from_index() {
     }
 
     // 3. Run commit. It should auto-remove the file from index.
-    commit(&storage, "commit with ignore".to_string(), true).unwrap();
+    commit(&storage, "commit with ignore".to_string(), true, None).unwrap();
 
     // 4. Verify index is empty (because the only file was removed)
     let staged = storage.index().get_all_staged_files().unwrap();
@@ -140,7 +140,7 @@ fn test_recursive_tree_generation() {
     }
 
     // Commit everything
-    commit(&storage, "recursive commit".to_string(), false).unwrap();
+    commit(&storage, "recursive commit".to_string(), false, None).unwrap();
 
     let head = storage.commits().get_current_head().unwrap().unwrap();
     let commit_meta = storage.commits().get_commit_meta(&head).unwrap().unwrap();
@@ -177,7 +177,7 @@ fn test_first_commit_creates_main_bookmark() {
             file.write_all(b"initial\n").unwrap();
         }
 
-        commit(&storage, "initial commit".to_string(), false).unwrap();
+        commit(&storage, "initial commit".to_string(), false, None).unwrap();
 
         let head = storage.commits().get_current_head().unwrap().unwrap();
         let main_ref = storage.refs().get_ref("main").unwrap().expect("main ref should exist");
@@ -203,26 +203,82 @@ fn test_commit_moves_bookmarks() {
             let mut file = File::create(file_path).unwrap();
             file.write_all(b"initial\n").unwrap();
         }
-        commit(&storage, "initial commit".to_string(), false).unwrap();
+        commit(&storage, "initial commit".to_string(), false, None).unwrap();
         let head1 = storage.commits().get_current_head().unwrap().unwrap();
 
         // Create a manual bookmark
         storage.refs().set_ref("my-feature", &head1).unwrap();
+        
+        // Checkout 'main' to set it as hint
+        crate::commands::checkout::checkout(&storage, "main", false).unwrap();
 
         // 2. Second commit
         {
             let mut file = File::create(file_path).unwrap();
             file.write_all(b"modified\n").unwrap();
         }
-        commit(&storage, "second commit".to_string(), false).unwrap();
+        commit(&storage, "second commit".to_string(), false, None).unwrap();
         let head2 = storage.commits().get_current_head().unwrap().unwrap();
 
-        // Both "main" and "my-feature" should have moved to head2
+        // Both "main" and "my-feature" should have moved to head2 because both point to parent
+        // and 'main' is hint. Wait, if both point to parent, and hint is main, only main moves?
+        // Let's re-read the logic: 
+        // if parent_refs.len() > 1: if hint in parent_refs: move hint.
+        
         let main_ref = storage.refs().get_ref("main").unwrap().unwrap();
         let feature_ref = storage.refs().get_ref("my-feature").unwrap().unwrap();
 
         assert_eq!(main_ref, head2);
-        assert_eq!(feature_ref, head2);
+        assert_eq!(feature_ref, head1); // Should stay behind because 'main' was the hint!
+    }
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_smart_deduplication_via_hint() {
+    let dir = tempdir().unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let db_path = "gik_test_hint.db";
+    {
+        let storage = Storage::new(db_path).unwrap();
+
+        File::create("test.txt").unwrap();
+        commit(&storage, "initial".to_string(), false, None).unwrap();
+        let head1 = storage.commits().get_current_head().unwrap().unwrap();
+
+        // Create two branches at the same point
+        storage.refs().set_ref("b1", &head1).unwrap();
+        storage.refs().set_ref("b2", &head1).unwrap();
+
+        // 1. Checkout b1 (sets hint)
+        crate::commands::checkout::checkout(&storage, "b1", false).unwrap();
+        
+        // 2. Commit
+        {
+            let mut f = File::create("test.txt").unwrap();
+            f.write_all(b"update 1").unwrap();
+        }
+        commit(&storage, "commit via b1".to_string(), false, None).unwrap();
+        let head2 = storage.commits().get_current_head().unwrap().unwrap();
+
+        assert_eq!(storage.refs().get_ref("b1").unwrap().unwrap(), head2);
+        assert_eq!(storage.refs().get_ref("b2").unwrap().unwrap(), head1); // Stayed behind!
+
+        // 3. Checkout b2 (sets hint)
+        crate::commands::checkout::checkout(&storage, "b2", true).unwrap();
+        
+        // 4. Commit via explicit flag
+        {
+            let mut f = File::create("test.txt").unwrap();
+            f.write_all(b"update 2").unwrap();
+        }
+        commit(&storage, "commit via b2 explicit".to_string(), false, Some("b2".to_string())).unwrap();
+        let head3 = storage.commits().get_current_head().unwrap().unwrap();
+
+        assert_eq!(storage.refs().get_ref("b2").unwrap().unwrap(), head3);
     }
 
     std::env::set_current_dir(original_dir).unwrap();

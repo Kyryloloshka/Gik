@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
+use crate::core::hash::Hash;
 
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
@@ -8,14 +9,11 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
+pub fn commit(storage: &Storage, message: String, staged: bool, explicit_branch: Option<String>) -> Result<()> {
     if !staged {
         crate::core::workspace::auto_stage(storage)?;
     }
 
-    // 1. Auto-remove files from index if they are now ignored
-    // (This is now handled by core::workspace::auto_stage)
-    // But if staged=true, we still might want to clean up.
     if staged {
         crate::core::workspace::clean_ignored_from_index(storage)?;
     }
@@ -81,21 +79,68 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
         meta,
     )?;
 
-    // 7. Move Bookmarks (Jujutsu-style)
+    // 7. Resolve Bookmarks (Smart Deduplication)
+    resolve_bookmarks(storage, &parent_hash, &commit_hash, explicit_branch)?;
+
+    println!("[main {}] {}", &hex::encode(commit_hash.0)[..7], message);
+
+    Ok(())
+}
+
+fn resolve_bookmarks(
+    storage: &Storage, 
+    parent_hash: &Option<Hash>, 
+    new_hash: &Hash, 
+    explicit_branch: Option<String>
+) -> Result<()> {
     let refs = storage.refs().list_refs()?;
+    let session_hint = storage.session().get_current_bookmark()?;
+
+    // Case 1: Explicit branch provided
+    if let Some(b) = explicit_branch {
+        storage.refs().set_ref(&b, new_hash)?;
+        storage.session().set_current_bookmark(&b)?;
+        return Ok(());
+    }
+
+    // Case 2: Empty system (first commit)
     if refs.is_empty() {
-        // First commit in the system, create 'main'
-        storage.refs().set_ref("main", &commit_hash)?;
-    } else if let Some(parent) = parent_hash {
-        // Move all bookmarks that were at the parent commit
-        for (name, hash) in refs {
-            if hash == parent {
-                storage.refs().set_ref(&name, &commit_hash)?;
+        storage.refs().set_ref("main", new_hash)?;
+        storage.session().set_current_bookmark("main")?;
+        return Ok(());
+    }
+
+    if let Some(parent) = parent_hash {
+        let parent_refs: Vec<String> = refs.iter()
+            .filter(|(_, h)| h == parent)
+            .map(|(n, _)| n.clone())
+            .collect();
+
+        if parent_refs.is_empty() {
+            // No bookmarks at parent. Just stay anonymous.
+            storage.session().clear_current_bookmark()?;
+        } else if parent_refs.len() == 1 {
+            // Exactly one bookmark. Move it automatically.
+            let name = &parent_refs[0];
+            storage.refs().set_ref(name, new_hash)?;
+            storage.session().set_current_bookmark(name)?;
+        } else {
+            // Multiple bookmarks at parent. Use session hint if it's one of them.
+            if let Some(hint) = session_hint {
+                if parent_refs.contains(&hint) {
+                    storage.refs().set_ref(&hint, new_hash)?;
+                    // session hint remains the same
+                } else {
+                    println!("Warning: Multiple bookmarks found at parent ({}), but none match current session hint ({}). Bookmark left behind.", 
+                             parent_refs.join(", "), hint);
+                    storage.session().clear_current_bookmark()?;
+                }
+            } else {
+                println!("Warning: Multiple bookmarks found at parent ({}). Please specify which one to move using --branch <name>. Bookmark left behind.", 
+                         parent_refs.join(", "));
             }
         }
     }
-
-    println!("[main {}] {}", &hex::encode(commit_hash.0)[..7], message);
 
     Ok(())
 }
