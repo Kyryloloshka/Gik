@@ -38,7 +38,6 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG=${{ github.event.inputs.tag }}
           fi
-          # The --allow-dirty flag is critical here
           cargo dist plan --tag=$TAG --output-format=json --allow-dirty > plan.json
           echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
         env:
@@ -50,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.plan.outputs.val).upload_artifacts_matrix.include }}
+        include: ${{ fromJson(needs.plan.outputs.val).upload_artifacts_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,11 +89,5 @@ jobs:
             TAG=${{ github.event.inputs.tag }}
           fi
           cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
-
-
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-rty
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
