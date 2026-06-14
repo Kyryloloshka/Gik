@@ -1,6 +1,6 @@
 [package]
 name = "gik"
-version = "0.1.17"
+version = "0.1.18"
 edition = "2021"
 description = "A Git-like transactional version control system written in Rust"
 repository = "https://github.com/Kyryloloshka/Gik"
@@ -20,6 +20,20 @@ hex = "0.4"
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[package.metadata.dist]
+# Package-specific distribution settings
+targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+installers = ["shell", "powershell"]
+
+[workspace]
+members = ["."]
+
+[workspace.metadata.dist]
+# Global CI/Distribution settings
+cargo-dist-version = "0.19.1"
+ci = ["github"]
+allow-dirty = ["ci"]
 
 [profile.dist]
 inherits = "release"

@@ -1,69 +1,64 @@
 name: Release
 
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
 permissions:
   contents: write
 
-on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
-  workflow_dispatch:
-
 jobs:
-  # Plan the release
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      val: ${{ steps.plan.outputs.manifest }}
+  publish:
+    name: Release for ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
-      - name: Install dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      - id: plan
+
+      - name: Get version
+        shell: bash
         run: |
-          dist plan --tag=${{ github.ref_name }} --output-format=json > dist-manifest.json
-          echo "manifest=$(cat dist-manifest.json | jq -c .)" >> $GITHUB_OUTPUT
+          VERSION=$(grep '^version =' Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+
+      - name: Auto Tag (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            echo "Creating new tag $TAG"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      
+      - name: Build and Upload
+        shell: bash
+        run: |
+          # Wait a few seconds for the tag to propagate in GitHub's internal systems
+          sleep 5
+          
+          # Build artifacts for this platform
+          cargo dist build --tag=$TAG --allow-dirty
+          
+          # Create release and upload artifacts (idempotent)
+          cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Build and Upload Artifacts
-  upload-artifacts:
-    needs: plan
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.plan.outputs.val).artifacts_matrix }}
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Install dist
-        run: ${{ matrix.install_dist }}
-      - name: Build artifacts
-        run: dist build --tag=${{ github.ref_name }} --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts-${{ matrix.runner }}
-          path: target/distrib/*
-
-  # Create the GitHub Release
-  publish-release:
-    needs: [plan, upload-artifacts]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: target/distrib/
-          pattern: artifacts-*
-          merge-multiple: true
-      - name: Publish Release
-        run: dist host --steps=upload --tag=${{ github.ref_name }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
