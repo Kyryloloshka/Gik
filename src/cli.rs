@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "gik")]
-#[command(about = "A simple git clone in Rust", long_about = None)]
+#[command(version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -27,7 +27,10 @@ pub enum Commands {
     Log,
     /// Undo the last commit
     Undo,
+    /// Update Gik to the latest version
+    Update,
 }
+
 
 #[cfg(test)]
 mod tests {
