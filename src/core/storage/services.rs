@@ -269,5 +269,12 @@ impl<'a> ObjectService<'a> {
         }
         Ok(hashes)
     }
+
+    pub fn get_object(&self, hash: &Hash) -> Result<Option<Vec<u8>>> {
+        let read_txn = self.repo.db.begin_read()?;
+        let table = read_txn.open_table(OBJECTS)?;
+        let guard = table.get(&hash.0)?;
+        Ok(guard.map(|g| g.value()))
+    }
 }
 

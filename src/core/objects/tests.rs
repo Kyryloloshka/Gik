@@ -42,3 +42,25 @@ fn test_compress_decompress_blob() {
     let expected = format!("blob {}\0{}", size, content);
     assert_eq!(decompressed, expected);
 }
+
+#[test]
+fn test_parse_tree() {
+    let mut entries = Vec::new();
+    let hash1 = crate::core::hash::Hash([1; 20]);
+    let hash2 = crate::core::hash::Hash([2; 20]);
+    entries.push((0o100644, "file1.txt".to_string(), hash1));
+    entries.push((0o040000, "dir1".to_string(), hash2));
+    entries.sort_by(|a, b| a.1.cmp(&b.1));
+
+    let content = super::tree::build_tree_content(&entries);
+    let parsed_entries = parse_tree(&content).unwrap();
+
+    assert_eq!(parsed_entries.len(), 2);
+    assert_eq!(parsed_entries[0].0, 0o040000);
+    assert_eq!(parsed_entries[0].1, "dir1");
+    assert_eq!(parsed_entries[0].2, hash2);
+
+    assert_eq!(parsed_entries[1].0, 0o100644);
+    assert_eq!(parsed_entries[1].1, "file1.txt");
+    assert_eq!(parsed_entries[1].2, hash1);
+}

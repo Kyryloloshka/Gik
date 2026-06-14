@@ -37,7 +37,7 @@ pub fn compress_tree<W: Write>(entries: &[(u32, String, Hash)], writer: W) -> io
     Ok(())
 }
 
-fn build_tree_content(entries: &[(u32, String, Hash)]) -> Vec<u8> {
+pub(crate) fn build_tree_content(entries: &[(u32, String, Hash)]) -> Vec<u8> {
     let mut content = Vec::new();
     for (mode, name, hash) in entries {
         content.extend_from_slice(format!("{:o} {}\0", mode, name).as_bytes());
@@ -98,4 +98,79 @@ pub fn build_and_store_tree(
     compress_tree(&root_entries, &mut tree_content)?;
 
     Ok((tree_hash, tree_content))
+}
+
+/// Parses a Git-canonical tree object content.
+pub fn parse_tree(content: &[u8]) -> crate::error::Result<Vec<(u32, String, Hash)>> {
+    let mut entries = Vec::new();
+    let mut i = 0;
+    while i < content.len() {
+        // Find space after mode
+        let space_pos = content[i..].iter().position(|&b| b == b' ')
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: missing space"))? + i;
+        let mode_str = std::str::from_utf8(&content[i..space_pos])
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode UTF-8"))?;
+        let mode = u32::from_str_radix(mode_str, 8)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode octal"))?;
+        
+        // Find null after name
+        let null_pos = content[space_pos + 1..].iter().position(|&b| b == 0)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: missing null"))? + space_pos + 1;
+        let name = std::str::from_utf8(&content[space_pos + 1..null_pos])
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid name UTF-8"))?
+            .to_string();
+        
+        // Read 20 bytes hash
+        if null_pos + 1 + 20 > content.len() {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: truncated hash").into());
+        }
+        let mut hash_bytes = [0u8; 20];
+        hash_bytes.copy_from_slice(&content[null_pos + 1..null_pos + 1 + 20]);
+        let hash = Hash(hash_bytes);
+        
+        entries.push((mode, name, hash));
+        i = null_pos + 1 + 20;
+    }
+    Ok(entries)
+}
+
+/// Recursively traverses trees to return a flat map of path -> blob_hash.
+pub fn get_commit_tree_files(
+    storage: &Storage,
+    tree_hash: &Hash,
+) -> crate::error::Result<HashMap<String, Hash>> {
+    let mut files = HashMap::new();
+    recursive_tree_walk(storage, tree_hash, "", &mut files)?;
+    Ok(files)
+}
+
+fn recursive_tree_walk(
+    storage: &Storage,
+    tree_hash: &Hash,
+    prefix: &str,
+    files: &mut HashMap<String, Hash>,
+) -> crate::error::Result<()> {
+    let obj_data = storage.objects().get_object(tree_hash)?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Tree object {} not found", tree_hash)))?;
+    
+    let (obj_type, _, content) = crate::core::objects::decompress_object(&obj_data[..])?;
+    if obj_type != "tree" {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Object {} is not a tree", tree_hash)).into());
+    }
+    
+    let entries = parse_tree(&content)?;
+    for (mode, name, hash) in entries {
+        let full_path = if prefix.is_empty() {
+            name
+        } else {
+            format!("{}/{}", prefix, name)
+        };
+        
+        if mode == DIRECTORY_MODE {
+            recursive_tree_walk(storage, &hash, &full_path, files)?;
+        } else {
+            files.insert(full_path, hash);
+        }
+    }
+    Ok(())
 }
