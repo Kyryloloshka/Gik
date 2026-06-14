@@ -18,6 +18,7 @@ thiserror = "1.0"
 chrono = "0.4"
 hex = "0.4"
 self_update = { version = "0.41", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
+glob = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"
