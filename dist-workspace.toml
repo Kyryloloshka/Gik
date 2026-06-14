@@ -9,6 +9,6 @@ installers = ["shell", "powershell"]
 # The archive format to use for non-windows builds
 unix-archive = ".tar.gz"
 # Target platforms to build binaries for
-targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
 # Whether to publish prereleases to GitHub Releases
 prerelease-to-github = true
