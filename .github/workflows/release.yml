@@ -22,7 +22,8 @@ jobs:
       - name: Run cargo-dist build & host
         # Explicitly pass --allow-dirty to BOTH commands to satisfy cargo-dist's strictness
         run: |
-          cargo dist build --tag=${{ github.ref_name || 'v0.1.7' }} --allow-dirty
-          cargo dist host --tag=${{ github.ref_name || 'v0.1.7' }} --steps=upload --steps=create-release --allow-dirty
+          cargo dist build --tag=${{ github.ref_name || 'v0.1.8' }} --allow-dirty
+          cargo dist host --tag=${{ github.ref_name || 'v0.1.8' }} --steps=upload --steps=create-release --allow-dirty
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
