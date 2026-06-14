@@ -1,6 +1,6 @@
 [package]
 name = "gik"
-version = "0.1.13"
+version = "0.1.14"
 edition = "2021"
 description = "A Git-like transactional version control system written in Rust"
 repository = "https://github.com/Kyryloloshka/Gik"
@@ -21,21 +21,12 @@ hex = "0.4"
 [dev-dependencies]
 tempfile = "3.8"
 
-[workspace]
-members = ["."]
-
-# Config for cargo-dist (MUST BE IN workspace.metadata)
-[workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (0.0.0 to use latest)
+# Config for cargo-dist
+[package.metadata.dist]
 cargo-dist-version = "0.19.1"
-# CI backends to support
 ci = ["github"]
-# The installers to generate for each release
 installers = ["shell", "powershell"]
-# Target platforms to build binaries for
 targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
-# Publish jobs to run in CI
-publish-jobs = ["homebrew"]
 # Allow the CI workflow to be 'dirty' (manually edited)
 allow-dirty = ["ci"]
 
@@ -43,4 +34,3 @@ allow-dirty = ["ci"]
 inherits = "release"
 lto = "thin"
 debug = false
-
