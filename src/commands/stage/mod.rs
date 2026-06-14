@@ -21,6 +21,8 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
     let file = File::open(&path)?;
     storage.index().stage_file(&path, &hash, size, file)?;
 
-
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

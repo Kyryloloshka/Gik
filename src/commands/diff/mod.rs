@@ -1,12 +1,11 @@
 use crate::core::storage::Storage;
 use crate::core::hash::Hash;
 use crate::error::Result;
-use crate::core::objects::decompress_object;
 use crate::core::workspace::get_status;
 use crate::core::models::FileState;
 use colored::*;
 use similar::{ChangeTag, TextDiff};
-use std::io::Cursor;
+
 
 /// Show changes between commits, commit and working tree, etc
 pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
@@ -40,7 +39,7 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
                 FileState::New => String::new(),
                 _ => {
                     let hash = head_files.get(path).unwrap();
-                    get_blob_content_as_string(storage, hash)?
+                    storage.objects().get_blob_text(hash)?
                 }
             };
 
@@ -48,7 +47,7 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
                 FileState::Deleted => String::new(),
                 _ => {
                     let hash = index_files.get(path).unwrap();
-                    get_blob_content_as_string(storage, hash)?
+                    storage.objects().get_blob_text(hash)?
                 }
             };
 
@@ -71,7 +70,7 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
             let state = repo_status.unstaged.get(path).unwrap();
             let old_content = {
                 let hash = index_files.get(path).unwrap();
-                get_blob_content_as_string(storage, hash)?
+                storage.objects().get_blob_text(hash)?
             };
 
             let new_content = match state {
@@ -88,7 +87,7 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
 
 fn print_diff(path: &str, old: &str, new: &str) {
     println!("{} {}", "diff --gik".bold(), path.bold());
-    
+
     let diff = TextDiff::from_lines(old, new);
     for change in diff.iter_all_changes() {
         let sign = match change.tag() {
@@ -101,22 +100,6 @@ fn print_diff(path: &str, old: &str, new: &str) {
     println!();
 }
 
-/// Fetch a blob from storage and return its content as a String
-pub fn get_blob_content_as_string(storage: &Storage, hash: &Hash) -> Result<String> {
-    if let Some(compressed_data) = storage.objects().get_object(hash)? {
-        let (obj_type, _size, content) = decompress_object(Cursor::new(compressed_data))?;
-        if obj_type != "blob" {
-            return Err(crate::error::GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Object {} is not a blob (type: {})", hash, obj_type)
-            )));
-        }
-        Ok(String::from_utf8_lossy(&content).to_string())
-    } else {
-        Err(crate::error::GikError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Blob {} not found in storage", hash)
-        )))
-    }
-}
+#[cfg(test)]
+mod tests;
 

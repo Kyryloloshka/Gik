@@ -11,7 +11,7 @@ pub fn log(storage: &Storage) -> Result<()> {
 
     while let Some(hash) = current_hash {
         if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
-            println!("commit {}", hex::encode(hash));
+            println!("commit {}", hash);
             println!("Author: {}", meta.author);
             
             // Format date
@@ -31,3 +31,6 @@ pub fn log(storage: &Storage) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

@@ -11,3 +11,6 @@ pub fn undo(storage: &Storage) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

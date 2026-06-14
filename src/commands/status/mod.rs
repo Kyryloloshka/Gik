@@ -60,3 +60,5 @@ pub fn status(storage: &Storage) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests;

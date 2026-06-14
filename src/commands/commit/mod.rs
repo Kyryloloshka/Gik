@@ -11,11 +11,16 @@ fn current_timestamp() -> u64 {
 pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
     if !staged {
         crate::core::workspace::auto_stage(storage)?;
-    } else {
+    }
+
+    // 1. Auto-remove files from index if they are now ignored
+    // (This is now handled by core::workspace::auto_stage)
+    // But if staged=true, we still might want to clean up.
+    if staged {
         crate::core::workspace::clean_ignored_from_index(storage)?;
     }
 
-    // 1. Get staged files
+    // 2. Get staged files
     let staged_files = storage.index().get_all_staged_files()?;
     if staged_files.is_empty() {
         println!("Nothing to commit");
@@ -80,3 +85,6 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
