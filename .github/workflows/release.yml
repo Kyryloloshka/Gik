@@ -1,11 +1,4 @@
-# CI that:
-#
-# * checks for a Tag push (e.g. v1.2.3)
-# * runs cargo-dist to build and package the application
-# * creates a GitHub Release with the artifacts and installers
-#
-# For more info: https://opensource.axofunction.com/cargo-dist/book/
-
+# Simple CI for cargo-dist
 name: Release
 
 on:
@@ -26,9 +19,8 @@ jobs:
           submodules: recursive
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      - name: Run cargo-dist
-        # We use 'cargo dist build' and 'cargo dist host' in one go.
-        # The '--allow-dirty' flag is the key here to bypass the strict check.
+      - name: Run cargo-dist build & host
+        # Explicitly pass --allow-dirty to BOTH commands to satisfy cargo-dist's strictness
         run: |
           cargo dist build --tag=${{ github.ref_name || 'v0.1.7' }} --allow-dirty
           cargo dist host --tag=${{ github.ref_name || 'v0.1.7' }} --steps=upload --steps=create-release --allow-dirty

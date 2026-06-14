@@ -24,7 +24,7 @@ tempfile = "3.8"
 [workspace]
 members = ["."]
 
-# Config for cargo-dist
+# Config for cargo-dist (MUST BE IN workspace.metadata)
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (0.0.0 to use latest)
 cargo-dist-version = "0.19.1"
