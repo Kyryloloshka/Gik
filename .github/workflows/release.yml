@@ -11,7 +11,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -34,7 +34,6 @@ jobs:
           echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
   # This job builds the binaries
   upload-artifacts:
