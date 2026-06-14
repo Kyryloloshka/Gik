@@ -6,8 +6,10 @@ Cargo.lock
 .superpowers/
 .gemini/
 .worktrees/
-docs/superpowers/
+docs/
 MEMORY.md
+AGENTS.md
+GEMINI.md
 
 # Logs
 *.log
