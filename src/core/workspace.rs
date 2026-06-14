@@ -7,7 +7,7 @@ use crate::core::objects::get_commit_tree_files;
 use std::collections::{HashMap, HashSet};
 
 /// Recursively scans the workspace and stages all non-ignored files.
-/// Also removes files from the index that are now ignored.
+/// Also removes files from the index that are now ignored or deleted.
 pub fn auto_stage(storage: &Storage) -> Result<()> {
     let matcher = IgnoreMatcher::new();
 
@@ -16,6 +16,15 @@ pub fn auto_stage(storage: &Storage) -> Result<()> {
 
     // 2. Auto-remove files from index if they are now ignored
     remove_ignored_from_index(storage, &matcher)?;
+
+    // 3. Remove files from index that have been deleted from disk
+    let disk_files = get_disk_state()?;
+    let index_files = storage.index().get_all_staged_files()?;
+    for (path, _) in index_files {
+        if !disk_files.contains_key(&path) {
+            storage.index().unstage_file(&path)?;
+        }
+    }
 
     Ok(())
 }
