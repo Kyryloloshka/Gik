@@ -55,10 +55,8 @@ jobs:
           submodules: recursive
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      - name: Install Rust target
-        run: rustup target add ${{ matrix.target }}
       - name: Build artifacts
-        run: cargo dist build --tag=${{ needs.tagger.outputs.tag }} --target=${{ matrix.target }} --allow-dirty
+        run: cargo dist build --tag=${{ needs.tagger.outputs.tag }} --allow-dirty
       - name: Upload artifacts to GH Actions
         uses: actions/upload-artifact@v4
         with:
