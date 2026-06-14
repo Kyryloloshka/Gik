@@ -1,4 +1,11 @@
-# Simple CI for cargo-dist
+# CI that:
+#
+# * checks for a Tag push (e.g. v1.2.3)
+# * runs cargo-dist to build and package the application
+# * creates a GitHub Release with the artifacts and installers
+#
+# For more info: https://opensource.axofunction.com/cargo-dist/book/
+
 name: Release
 
 on:
@@ -6,27 +13,82 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      val: ${{ steps.plan.outputs.val }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
-      - name: Run cargo-dist build & host
-        # Explicitly pass --allow-dirty to BOTH commands to satisfy cargo-dist's strictness
+      - id: plan
         run: |
-          cargo dist build --tag=${{ github.ref_name || 'v0.1.10' }} --allow-dirty
-          cargo dist host --tag=${{ github.ref_name || 'v0.1.10' }} --steps=create --steps=upload --allow-dirty
+          TAG=${{ github.ref_name }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG=${{ github.event.inputs.tag }}
+          fi
+          # The --allow-dirty flag is critical here
+          cargo dist plan --tag=$TAG --output-format=json --allow-dirty > plan.json
+          echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  upload-artifacts:
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.val).upload_artifacts_matrix.include }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Run cargo-dist build
+        run: |
+          TAG=${{ github.ref_name }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG=${{ github.event.inputs.tag }}
+          fi
+          cargo dist build --tag=$TAG --output-format=json ${{ matrix.dist_args }} --allow-dirty > dist-manifest.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.os }}
+          path: target/distrib/*
 
-
-
+  publish-release:
+    needs: [plan, upload-artifacts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: target/distrib
+          pattern: artifacts-*
+          merge-multiple: true
+      - name: Run cargo-dist host
+        run: |
+          TAG=${{ github.ref_name }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG=${{ github.event.inputs.tag }}
+          fi
+          cargo dist host --tag=$TAG --steps=create --steps=upload --allow-dirty
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
