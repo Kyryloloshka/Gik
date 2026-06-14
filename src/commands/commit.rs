@@ -53,7 +53,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool) -> Result<()> {
     }
 
     // 3. Create Tree object using core domain logic
-    let (tree_hash, tree_content) = crate::core::objects::tree::build_and_store_tree(staged_files)?;
+    let (tree_hash, tree_content) = crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
 
     // 4. Get current HEAD (parent)
     let parent_hash = storage.get_current_head()?;
