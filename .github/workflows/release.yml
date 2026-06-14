@@ -17,6 +17,7 @@ permissions:
   contents: write
 
 jobs:
+  # This job determines what needs to be built
   plan:
     runs-on: ubuntu-latest
     outputs:
@@ -32,9 +33,9 @@ jobs:
           cargo dist plan --output-format=json > plan.json
           echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
+  # This job builds the binaries
   upload-artifacts:
     needs: plan
     runs-on: ${{ matrix.os }}
@@ -44,6 +45,8 @@ jobs:
         include: ${{ fromJson(needs.plan.outputs.val).upload_artifacts_matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
       - name: Run cargo-dist build
@@ -54,6 +57,7 @@ jobs:
           name: artifacts-${{ matrix.os }}
           path: target/dist/*
 
+  # This job creates the GitHub Release
   publish-release:
     needs: [plan, upload-artifacts]
     runs-on: ubuntu-latest
