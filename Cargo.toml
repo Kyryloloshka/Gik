@@ -1,6 +1,6 @@
 [package]
 name = "gik"
-version = "0.1.24"
+version = "0.1.25"
 edition = "2021"
 description = "A Git-like transactional version control system written in Rust"
 repository = "https://github.com/Kyryloloshka/Gik"
