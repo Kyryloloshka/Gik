@@ -24,12 +24,12 @@ Once a release is published, users can install Gik using these commands:
 
 ### Linux / macOS (Shell)
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/your-username/gik/releases/latest/download/gik-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Kyryloloshka/Gik/releases/latest/download/gik-installer.sh | sh
 ```
 
 ### Windows (PowerShell)
 ```powershell
-irm https://github.com/your-username/gik/releases/latest/download/gik-installer.ps1 | iex
+irm https://github.com/Kyryloloshka/Gik/releases/latest/download/gik-installer.ps1 | iex
 ```
 
-*Note: Replace `your-username` with the actual GitHub username where the repository is hosted.*
+*Note: Replace `Kyryloloshka` with the actual GitHub username where the repository is hosted.*
