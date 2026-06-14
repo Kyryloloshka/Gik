@@ -1,0 +1,68 @@
+# CI that:
+#
+# * checks for a Tag push (e.g. v1.2.3)
+# * runs cargo-dist to build and package the application
+# * creates a GitHub Release with the artifacts and installers
+#
+# For more info: https://opensource.axofunction.com/cargo-dist/book/
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      val: ${{ steps.plan.outputs.val }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - id: plan
+        run: |
+          cargo dist plan --output-format=json > plan.json
+          echo "val=$(cat plan.json | jq -c .)" >> $GITHUB_OUTPUT
+
+  upload-artifacts:
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.val).upload_artifacts_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Run cargo-dist build
+        run: cargo dist build --tag=${{ github.ref_name }} --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.os }}
+          path: target/dist/*
+
+  publish-release:
+    needs: [plan, upload-artifacts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-dist
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.19.1/cargo-dist-installer.sh | sh
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: target/dist
+          pattern: artifacts-*
+          merge-multiple: true
+      - name: Run cargo-dist host
+        run: cargo dist host --tag=${{ github.ref_name }} --steps=upload --steps=create-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
