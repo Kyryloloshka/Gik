@@ -1,6 +1,5 @@
-#[cfg(test)]
-mod tests {
-    use crate::commands::commit::commit;
+#![cfg(test)]
+use crate::commands::commit::commit;
     use crate::commands::stage::stage;
     use crate::commands::test_utils::TestEnv;
     use std::fs;
@@ -98,4 +97,3 @@ mod tests {
         crate::commands::checkout::checkout(storage, &hash1, true).expect("Checkout with force:true should succeed");
         assert_eq!(fs::read_to_string("file.txt").unwrap(), "v1");
     }
-}

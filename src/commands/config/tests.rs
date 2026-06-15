@@ -1,6 +1,4 @@
 use super::*;
-use crate::core::storage::Storage;
-use tempfile::tempdir;
 
 #[test]
 fn test_config_local_set_get() {

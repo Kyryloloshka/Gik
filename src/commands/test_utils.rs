@@ -13,6 +13,12 @@ impl Drop for TestEnv {
     }
 }
 
+impl Default for TestEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestEnv {
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();

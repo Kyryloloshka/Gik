@@ -1,5 +1,4 @@
 use super::*;
-use tempfile::tempdir;
 
 #[test]
 fn test_init_creates_db_file() {

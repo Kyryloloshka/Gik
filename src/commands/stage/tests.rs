@@ -1,7 +1,5 @@
 use super::*;
-use crate::core::storage::Storage;
 use crate::commands::test_utils::*;
-use tempfile::tempdir;
 use std::io::Write;
 use std::fs::File;
 
