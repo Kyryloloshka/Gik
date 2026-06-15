@@ -3,7 +3,12 @@ pub mod services;
 
 use crate::error::Result;
 use self::repository::*;
-use self::services::*;
+use self::services::index::IndexService;
+use self::services::commit::CommitService;
+use self::services::undo::UndoService;
+use self::services::object::ObjectService;
+use self::services::refs::RefService;
+use self::services::config::ConfigService;
 use std::path::Path;
 
 pub struct Storage {
@@ -37,8 +42,8 @@ impl Storage {
         RefService { repo: &self.repo }
     }
 
-    pub fn session(&self) -> SessionService<'_> {
-        SessionService { repo: &self.repo }
+    pub fn session(&self) -> self::services::session::SessionService<'_> {
+        self::services::session::SessionService { repo: &self.repo }
     }
 
     pub fn config(&self) -> ConfigService<'_> {
@@ -51,7 +56,8 @@ impl Storage {
         write_txn.commit()?;
         Ok(())
     }
-    }
+}
+
 
 #[cfg(test)]
 mod tests;

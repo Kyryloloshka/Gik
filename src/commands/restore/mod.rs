@@ -14,7 +14,8 @@ pub fn restore(storage: &Storage, path: &str) -> Result<()> {
         ))),
     };
 
-    let meta = storage.commits().get_commit_meta(&head_hash)?.unwrap();
+    let meta = storage.commits().get_commit_meta(&head_hash)?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "HEAD commit metadata missing"))?;
     let head_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
 
     if path == "." {

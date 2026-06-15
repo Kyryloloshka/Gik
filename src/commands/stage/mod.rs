@@ -76,7 +76,7 @@ fn stage_directory(storage: &Storage, dir_path: &str, matcher: &crate::core::ign
             }
 
             if entry.file_type()?.is_dir() {
-                stack.push(path.to_str().unwrap().to_string());
+                stack.push(path.to_string_lossy().into_owned());
             } else {
                 let hash = {
                     let file = File::open(&path)?;

@@ -6,12 +6,7 @@ use std::fs::File;
 
 #[test]
 fn test_undo_works() {
-    let dir = tempdir().unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(dir.path()).unwrap();
-
-    let db_path = "gik_test.db";
-        let storage = crate::commands::test_utils::setup_test_storage(db_path);
+    let env = crate::commands::test_utils::TestEnv::new();
 
     let file_path = "test.txt";
     {
@@ -20,19 +15,17 @@ fn test_undo_works() {
     }
 
     // Undo staging
-    crate::commands::stage(&storage, file_path.to_string()).unwrap();
-    assert!(storage.index().get_staged_hash(file_path).unwrap().is_some());
-    undo(&storage).unwrap();
-    assert!(storage.index().get_staged_hash(file_path).unwrap().is_none());
+    crate::commands::stage(&env.storage, file_path.to_string()).unwrap();
+    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_some());
+    undo(&env.storage).unwrap();
+    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_none());
 
     // Undo commit
-    crate::commands::stage(&storage, file_path.to_string()).unwrap();
-    crate::commands::commit(&storage, "initial commit".to_string(), true, None).unwrap();
-    let first_head = storage.commits().get_current_head().unwrap();
+    crate::commands::stage(&env.storage, file_path.to_string()).unwrap();
+    crate::commands::commit(&env.storage, "initial commit".to_string(), true, None).unwrap();
+    let first_head = env.storage.commits().get_current_head().unwrap();
     assert!(first_head.is_some());
 
-    undo(&storage).unwrap();
-    assert!(storage.commits().get_current_head().unwrap().is_none());
-
-    std::env::set_current_dir(original_dir).unwrap();
+    undo(&env.storage).unwrap();
+    assert!(env.storage.commits().get_current_head().unwrap().is_none());
 }

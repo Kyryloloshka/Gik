@@ -1,19 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use crate::core::storage::Storage;
     use crate::core::hash::Hash;
-    use crate::commands::branch;
+    use crate::commands::branch::branch;
+    use crate::commands::test_utils::TestEnv;
     use crate::error::Result;
-    use tempfile::tempdir;
 
     #[test]
     fn test_branch_create_and_list() -> Result<()> {
-        let dir = tempdir()?;
-        let db_path = dir.path().join("gik.db");
-        let db_path_str = db_path.to_str().unwrap();
-        
-        crate::commands::init(db_path_str).unwrap();
-        let storage = Storage::new(db_path_str)?;
+        let env = TestEnv::new();
+        let storage = &env.storage;
         
         // Create a commit first
         storage.index().stage_file("test.txt", &Hash([1; 20]), 4, "test".as_bytes())?;
@@ -36,10 +31,11 @@ mod tests {
         )?;
 
         // Create branch
-        branch(&storage, Some("main".to_string()), false)?;
+        branch(storage, Some("main".to_string()), false)?;
 
         // List branches
         let refs = storage.refs().list_refs()?;
+        // Note: commit_transaction above didn't create 'main' automatically because it's a raw service call, not the 'commit' command.
         assert_eq!(refs.len(), 1);
         assert_eq!(refs[0].0, "main");
         assert_eq!(refs[0].1, head_hash);
@@ -49,18 +45,14 @@ mod tests {
 
     #[test]
     fn test_branch_delete() -> Result<()> {
-        let dir = tempdir()?;
-        let db_path = dir.path().join("gik.db");
-        let db_path_str = db_path.to_str().unwrap();
-        
-        crate::commands::init(db_path_str).unwrap();
-        let storage = Storage::new(db_path_str)?;
+        let env = TestEnv::new();
+        let storage = &env.storage;
 
         let hash = Hash([1; 20]);
         storage.refs().set_ref("feature", &hash)?;
         
         // Delete branch
-        branch(&storage, Some("feature".to_string()), true)?;
+        branch(storage, Some("feature".to_string()), true)?;
 
         let refs = storage.refs().list_refs()?;
         assert!(refs.is_empty());
