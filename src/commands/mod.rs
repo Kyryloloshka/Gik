@@ -9,6 +9,7 @@ pub mod undo;
 pub mod update;
 pub mod checkout;
 pub mod branch;
+pub mod config;
 
 pub use commit::commit;
 pub use diff::diff;
@@ -21,6 +22,7 @@ pub use undo::undo;
 pub use update::update;
 pub use checkout::checkout;
 pub use branch::branch;
+pub use config::config;
 
 #[cfg(test)]
 pub mod test_utils;

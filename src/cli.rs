@@ -42,6 +42,19 @@ pub enum Commands {
     },
     /// Undo the last commit
     Undo,
+    /// Manage Gik configuration
+    Config {
+        /// The config key to get or set
+        key: Option<String>,
+        /// The config value to set
+        value: Option<String>,
+        /// Use global configuration
+        #[arg(long)]
+        global: bool,
+        /// Import user.name and user.email from git config
+        #[arg(long)]
+        import_git: bool,
+    },
     /// Show the working tree status
     Status,
     /// Show changes between commits, commit and working tree, etc

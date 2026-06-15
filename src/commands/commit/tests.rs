@@ -13,8 +13,7 @@ fn test_commit_creates_objects_and_updates_head() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = "gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     let file_path = "test.txt";
     {
@@ -58,8 +57,7 @@ fn test_commit_auto_stages_files() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = ".gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     let file_path = "test.txt";
     {
@@ -87,8 +85,7 @@ fn test_ignore_system_removes_from_index() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = ".gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     let file_path = "ignored_file.txt";
     {
@@ -126,8 +123,7 @@ fn test_recursive_tree_generation() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = ".gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     // Create nested structure
     let subdir_name = "subdir";
@@ -169,7 +165,7 @@ fn test_first_commit_creates_main_bookmark() {
 
     let db_path = "gik_test_main.db";
     {
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         let file_path = "test.txt";
         {
@@ -195,7 +191,7 @@ fn test_commit_moves_bookmarks() {
 
     let db_path = "gik_test_move.db";
     {
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         // 1. First commit
         let file_path = "test.txt";
@@ -243,7 +239,7 @@ fn test_smart_deduplication_via_hint() {
 
     let db_path = "gik_test_hint.db";
     {
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         File::create("test.txt").unwrap();
         commit(&storage, "initial".to_string(), false, None).unwrap();

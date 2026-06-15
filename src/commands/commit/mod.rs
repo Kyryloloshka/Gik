@@ -37,16 +37,25 @@ pub fn commit(storage: &Storage, message: String, staged: bool, explicit_branch:
     };
 
     // 5. Create Commit object
-    let author_name = crate::config::DEFAULT_AUTHOR_NAME;
-    let author_email = crate::config::DEFAULT_AUTHOR_EMAIL;
-    let author = format!("{} <{}>", author_name, author_email);
+    let author_name = storage.config().get("user.name")?;
+    let author_email = storage.config().get("user.email")?;
+
+    let (name, email) = match (author_name, author_email) {
+        (Some(n), Some(e)) => (n, e),
+        _ => return Err(crate::error::GikError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "\nAuthor identity unknown.\n\nPlease tell me who you are.\n\nRun:\n  gik config --global user.email \"you@example.com\"\n  gik config --global user.name \"Your Name\"\n\nOr import from git:\n  gik config --import-git\n"
+        ))),
+    };
+
+    let author = format!("{} <{}>", name, email);
     let timestamp = current_timestamp();
 
     let commit_hash = crate::core::objects::hash_commit(
         tree_hash,
         &parent_hashes,
-        author_name,
-        author_email,
+        &name,
+        &email,
         timestamp,
         &message,
     )?;
@@ -54,8 +63,8 @@ pub fn commit(storage: &Storage, message: String, staged: bool, explicit_branch:
     crate::core::objects::compress_commit(
         tree_hash,
         &parent_hashes,
-        author_name,
-        author_email,
+        &name,
+        &email,
         timestamp,
         &message,
         &mut commit_content,

@@ -13,7 +13,7 @@ mod tests {
         std::env::set_current_dir(dir.path()).unwrap();
 
         let db_path = "gik_test.db";
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         // 1. Create repo, file "a.txt" with "v1", commit (get hash1).
         fs::write("a.txt", "v1").unwrap();
@@ -49,7 +49,7 @@ mod tests {
         std::env::set_current_dir(dir.path()).unwrap();
 
         let db_path = "gik_test_bookmark.db";
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         // 1. Create repo, file "a.txt" with "v1", commit.
         fs::write("a.txt", "v1").unwrap();
@@ -91,7 +91,7 @@ mod tests {
         std::env::set_current_dir(dir.path()).unwrap();
 
         let db_path = "gik_test.db";
-        let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
         // 1. Create repo, commit a file.
         fs::write("file.txt", "v1").unwrap();

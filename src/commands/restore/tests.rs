@@ -10,8 +10,7 @@ fn test_restore_file() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = "gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     // 1. Create and commit a file
     fs::write("a.txt", "v1").unwrap();
@@ -36,8 +35,7 @@ fn test_restore_dot() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = "gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     // 1. Create and commit
     fs::write("a.txt", "v1").unwrap();

@@ -55,6 +55,9 @@ fn main() -> Result<()> {
                 Commands::Branch { name, delete } => {
                     commands::branch(&storage, name, delete)?;
                 }
+                Commands::Config { key, value, global, import_git } => {
+                    commands::config(&storage, key, value, global, import_git)?;
+                }
                 Commands::Init | Commands::Update => unreachable!(),
             }
         }

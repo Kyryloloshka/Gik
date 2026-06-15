@@ -12,8 +12,7 @@ fn test_log_runs_successfully() {
     std::env::set_current_dir(dir.path()).unwrap();
 
     let db_path = "gik_test.db";
-    crate::commands::init(db_path).unwrap();
-    let storage = Storage::new(db_path).unwrap();
+        let storage = crate::commands::test_utils::setup_test_storage(db_path);
 
     // No commits yet
     assert!(log(&storage, false).is_ok());

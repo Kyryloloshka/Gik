@@ -9,6 +9,7 @@ pub const STAGE_INDEX: TableDefinition<&str, &[u8; 20]> = TableDefinition::new("
 pub const REFS: TableDefinition<&str, &[u8; 20]> = TableDefinition::new("refs");
 pub const TRANSACTION_LOG: TableDefinition<u64, Vec<u8>> = TableDefinition::new("transaction_log");
 pub const SESSION: TableDefinition<&str, &str> = TableDefinition::new("session");
+pub const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
 
 pub struct Repository {
     pub(crate) db: Database,
@@ -32,6 +33,7 @@ impl Repository {
             let _ = write_txn.open_table(REFS)?;
             let _ = write_txn.open_table(TRANSACTION_LOG)?;
             let _ = write_txn.open_table(SESSION)?;
+            let _ = write_txn.open_table(CONFIG)?;
         }
         write_txn.commit()?;
         Ok(())
