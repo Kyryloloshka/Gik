@@ -8,8 +8,14 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use error::Result;
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(e) = run_cli() {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    }
+}
 
+fn run_cli() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
