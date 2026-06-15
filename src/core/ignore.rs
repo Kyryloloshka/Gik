@@ -5,6 +5,12 @@ pub struct IgnoreMatcher {
     patterns: Vec<Pattern>,
 }
 
+impl Default for IgnoreMatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IgnoreMatcher {
     pub fn new() -> Self {
         let mut patterns = Vec::new();

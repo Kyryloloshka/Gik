@@ -6,7 +6,7 @@ pub fn config(storage: &Storage, key: Option<String>, value: Option<String>, glo
     if import_git {
         println!("Importing Git configuration...");
         
-        let name_output = Command::new("git").args(&["config", "--global", "user.name"]).output();
+        let name_output = Command::new("git").args(["config", "--global", "user.name"]).output();
         if let Ok(output) = name_output {
             if output.status.success() {
                 let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -15,7 +15,7 @@ pub fn config(storage: &Storage, key: Option<String>, value: Option<String>, glo
             }
         }
         
-        let email_output = Command::new("git").args(&["config", "--global", "user.email"]).output();
+        let email_output = Command::new("git").args(["config", "--global", "user.email"]).output();
         if let Ok(output) = email_output {
             if output.status.success() {
                 let email = String::from_utf8_lossy(&output.stdout).trim().to_string();

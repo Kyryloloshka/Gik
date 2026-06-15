@@ -66,7 +66,7 @@ fn stage_directory(storage: &Storage, dir_path: &str, matcher: &crate::core::ign
             let path = entry.path();
             
             let relative_path = path.strip_prefix(&root)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             let path_str = relative_path.to_str().unwrap_or("");
             if path_str.is_empty() { continue; }
             let normalized = path_str.replace('\\', "/");
@@ -99,11 +99,10 @@ fn stage_directory(storage: &Storage, dir_path: &str, matcher: &crate::core::ign
     };
 
     for (path, _) in index_files {
-        if path.starts_with(&dir_prefix) {
-            if !std::path::Path::new(&path).exists() {
+        if path.starts_with(&dir_prefix)
+            && !std::path::Path::new(&path).exists() {
                 storage.index().unstage_file(&path)?;
             }
-        }
     }
 
     Ok(())

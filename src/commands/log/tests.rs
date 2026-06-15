@@ -1,7 +1,5 @@
 use super::*;
-use crate::core::storage::Storage;
 use crate::commands::test_utils::*;
-use tempfile::tempdir;
 use std::io::Write;
 use std::fs::File;
 
@@ -10,7 +8,7 @@ fn test_log_runs_successfully() {
     let env = crate::commands::test_utils::TestEnv::new();
 
     // No commits yet
-    assert!(log(&env.storage, false).is_ok());
+    assert!(log(&env.storage, false, false).is_ok());
 
     let file_path = "test.txt";
     {
@@ -22,5 +20,5 @@ fn test_log_runs_successfully() {
     crate::commands::commit(&env.storage, "initial commit".to_string(), true, None).unwrap();
 
     // One commit
-    assert!(log(&env.storage, false).is_ok());
+    assert!(log(&env.storage, false, false).is_ok());
 }

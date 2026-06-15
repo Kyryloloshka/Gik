@@ -114,11 +114,10 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     // 3. Clean current disk: remove files that are not in the target tree
     let disk_files = get_disk_state()?;
     for (path, _) in disk_files {
-        if !tree_files.contains_key(&path) {
-            if std::path::Path::new(&path).exists() {
+        if !tree_files.contains_key(&path)
+            && std::path::Path::new(&path).exists() {
                 std::fs::remove_file(&path)?;
             }
-        }
     }
 
     // 4. Restore target files
@@ -154,7 +153,7 @@ fn get_disk_state() -> Result<HashMap<String, Hash>> {
 
             // Get path relative to the repository root
             let relative_path = path.strip_prefix(&root)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             let path_str = relative_path.to_str().unwrap_or("");
             
             if path_str.is_empty() { continue; }
@@ -190,7 +189,7 @@ fn scan_and_stage(storage: &Storage, matcher: &IgnoreMatcher) -> Result<()> {
             let path = entry.path();
             
             let relative_path = path.strip_prefix(&root)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             let path_str = relative_path.to_str().unwrap_or("");
             
             if path_str.is_empty() { continue; }

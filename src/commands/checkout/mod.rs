@@ -14,8 +14,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     if !force {
         let status = get_status(storage)?;
         if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-            return Err(GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(GikError::Io(std::io::Error::other(
                 "You have uncommitted changes. Use --force to discard them."
             )));
         }
@@ -42,8 +41,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
             )));
         }
         if matches.len() > 1 {
-            return Err(GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(GikError::Io(std::io::Error::other(
                 format!("Ambiguous hash: {}", hash)
             )));
         }

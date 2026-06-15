@@ -4,7 +4,7 @@ use crate::core::hash::Hash;
 use std::collections::{HashSet, VecDeque, HashMap};
 use colored::*;
 
-pub fn log(storage: &Storage, all: bool) -> Result<()> {
+pub fn log(storage: &Storage, all: bool, _graph: bool) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
     
@@ -70,7 +70,7 @@ pub fn log(storage: &Storage, all: bool) -> Result<()> {
         }
 
         // Sort by timestamp descending
-        all_commits.sort_by(|a, b| b.1.cmp(&a.1));
+        all_commits.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         for (hash, _) in all_commits {
             print_commit(storage, &hash, &labels)?;

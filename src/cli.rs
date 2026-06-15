@@ -34,6 +34,9 @@ pub enum Commands {
         /// Show all commits, not just ancestors of HEAD
         #[arg(short, long)]
         all: bool,
+        /// Show the commit graph
+        #[arg(short, long)]
+        graph: bool,
     },
     /// Restore working tree files
     Restore {
@@ -90,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_parse_init() {
-        let cli = Cli::try_parse_from(&["gik", "init"]).unwrap();
+        let cli = Cli::try_parse_from(["gik", "init"]).unwrap();
         match cli.command {
             Commands::Init => {}
             _ => panic!("Expected Init command"),
@@ -99,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_parse_stage() {
-        let cli = Cli::try_parse_from(&["gik", "stage", "file.txt"]).unwrap();
+        let cli = Cli::try_parse_from(["gik", "stage", "file.txt"]).unwrap();
         match cli.command {
             Commands::Stage { path } => {
                 assert_eq!(path, "file.txt");
@@ -110,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_parse_commit() {
-        let cli = Cli::try_parse_from(&["gik", "commit", "-m", "hello"]).unwrap();
+        let cli = Cli::try_parse_from(["gik", "commit", "-m", "hello"]).unwrap();
         match cli.command {
             Commands::Commit { message, staged, branch } => {
                 assert_eq!(message, "hello");
@@ -123,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_parse_checkout() {
-        let cli = Cli::try_parse_from(&["gik", "checkout", "abc1234", "--force"]).unwrap();
+        let cli = Cli::try_parse_from(["gik", "checkout", "abc1234", "--force"]).unwrap();
         match cli.command {
             Commands::Checkout { hash, force } => {
                 assert_eq!(hash, "abc1234");

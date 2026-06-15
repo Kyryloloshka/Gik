@@ -45,11 +45,7 @@ impl<'a> IndexService<'a> {
         {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let hash = {
-                if let Some(guard) = index.get(path)? {
-                    Some(Hash(*guard.value()))
-                } else {
-                    None
-                }
+                index.get(path)?.map(|guard| Hash(*guard.value()))
             };
 
             if let Some(h) = hash {

@@ -33,8 +33,8 @@ fn main() -> Result<()> {
                 Commands::Commit { message, staged, branch } => {
                     commands::commit(&storage, message, staged, branch)?;
                 }
-                Commands::Log { all } => {
-                    commands::log(&storage, all)?;
+                Commands::Log { all, graph } => {
+                    commands::log(&storage, all, graph)?;
                 }
                 Commands::Restore { path } => {
                     let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);

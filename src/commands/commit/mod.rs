@@ -42,8 +42,7 @@ pub fn commit(storage: &Storage, message: String, staged: bool, explicit_branch:
 
     let (name, email) = match (author_name, author_email) {
         (Some(n), Some(e)) => (n, e),
-        _ => return Err(crate::error::GikError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        _ => return Err(crate::error::GikError::Io(std::io::Error::other(
             "\nAuthor identity unknown.\n\nPlease tell me who you are.\n\nRun:\n  gik config --global user.email \"you@example.com\"\n  gik config --global user.name \"Your Name\"\n\nOr import from git:\n  gik config --import-git\n"
         ))),
     };
