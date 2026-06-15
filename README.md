@@ -1,8 +1,19 @@
-# Gik
+# Gik 🦀
 
-**Gik** is a high-performance, transactional version control system written in Rust. It's designed to be Git-compatible on the binary level while providing 100% data safety through an ACID-compliant embedded database.
+**Gik** is a high-performance, modern transactional version control system written in Rust. It combines the reliability of an ACID-compliant database with the flexibility of contemporary versioning workflows like Jujutsu-style bookmarks.
 
-## Quick Install
+## 🚀 Key Features
+
+- **ACID Transactions**: Built on `redb`. Every operation (staging, committing, branching) is atomic. Your repository state can never be corrupted.
+- **Floating Bookmarks**: Branching reimagined. Bookmarks are lightweight labels that automatically slide forward when you commit. No more "detached HEAD" nightmares.
+- **Smart Staging**: Full support for recursive staging (`gik stage .`), directory-level staging, and explicit staging of file deletions.
+- **Instant Time Travel**: Switch between any commit or bookmark instantly with `gik checkout`, featuring built-in safety checks for uncommitted changes.
+- **Git Compatibility**: Uses canonical Git binary formats for Blobs, Trees, and Commits, ensuring a familiar data model.
+- **Deep Visibility**: Line-by-line `gik diff` and comprehensive `gik log --all` for a clear view of your project's evolution.
+- **Subdirectory Support**: Run Gik commands from any folder within your project. It automatically discovers the repository root.
+- **Zero-Config Onboarding**: Import your existing identity from Git with a single command: `gik config --import-git`.
+
+## 📦 Installation
 
 ### Linux / macOS
 
@@ -16,63 +27,59 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Kyryloloshka/Gik/releas
 irm https://github.com/Kyryloloshka/Gik/releases/latest/download/gik-installer.ps1 | iex
 ```
 
-## Key Features
+## 🛠 Usage & Commands
 
-- **ACID Transactions**: Every operation is atomic. No more corrupted repository states.
-- **Git Binary Compatibility**: Uses canonical Git formats for Blobs, Trees, and Commits.
-- **Streaming IO**: Efficiently handles large files without memory overhead.
-- **Instant Undo**: Built-in transaction logging allows you to roll back any action instantly.
-
-## Usage & Commands
-
-### 1. Initialize a repository
-
-Creates a new transactional database in the current directory.
-
+### 1. Initialize
 ```bash
 gik init
 ```
 
-### 2. Stage files
-
-Hash and prepare files for the next commit.
-
+### 2. Configure Identity
 ```bash
-gik stage <path>
+# Manual setup
+gik config --global user.name "Your Name"
+gik config --global user.email "you@example.com"
+
+# OR: Instant import from Git
+gik config --import-git
 ```
 
-### 3. Commit changes
-
-Record a permanent snapshot of the staged changes.
-
+### 3. Stage Changes
 ```bash
-gik commit -m "Your descriptive message"
+gik stage file.txt    # Single file
+gik stage src/        # Directory
+gik stage .           # Everything (adds new, updates modified, stages deleted)
 ```
 
-### 4. View history
-
-Browse the commit graph starting from HEAD.
-
+### 4. Commit
 ```bash
-gik log
+gik commit -m "feat: implement magic"
 ```
 
-### 5. Undo last action
-
-The "Magic Button". Instantly rolls back the last staging or commit operation.
-
+### 5. Branching (Bookmarks)
 ```bash
-gik undo
+gik branch feature-x           # Create a bookmark on current HEAD
+gik branch                     # List all bookmarks
+gik checkout feature-x         # Switch to a bookmark or hash
+```
+
+### 6. Inspect & Restore
+```bash
+gik status                     # Current state overview
+gik diff                       # See exact changes
+gik log --all                  # View entire commit graph
+gik restore .                  # Discard all local changes
+```
+
+### 7. The Magic Button (Undo)
+```bash
+gik undo                       # Roll back the last action (physically restores files!)
 ```
 
 ## ⚖️ License
-Licensed under either of
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-at your option.
+
+Gik is dual-licensed under the **MIT** and **Apache-2.0** licenses. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE) for details.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please feel free to open issues or submit pull requests.
-
-
+We are in the MVP stage and welcome all feedback! Feel free to open issues or submit pull requests.
