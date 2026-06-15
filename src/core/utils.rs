@@ -31,3 +31,21 @@ pub fn resolve_path(cwd: &Path, root_dir: &Path, user_path: &str) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_resolve_path() {
+        let root = Path::new("/repo");
+        let cwd1 = Path::new("/repo/src");
+        
+        assert_eq!(resolve_path(cwd1, root, "main.rs"), "src/main.rs");
+        assert_eq!(resolve_path(cwd1, root, "."), "src");
+        assert_eq!(resolve_path(root, root, "."), ".");
+        assert_eq!(resolve_path(root, root, "src/main.rs"), "src/main.rs");
+    }
+}
+
