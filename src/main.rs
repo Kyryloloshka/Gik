@@ -16,44 +16,47 @@ fn main() -> Result<()> {
         Commands::Init => {
             commands::init(crate::config::DB_PATH)?;
         }
-        Commands::Stage { path } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::stage(&storage, path)?;
-        }
-        Commands::Commit { message, staged, branch } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::commit(&storage, message, staged, branch)?;
-        }
-        Commands::Log { all } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::log(&storage, all)?;
-        }
-        Commands::Restore { path } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::restore(&storage, &path)?;
-        }
-        Commands::Undo => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::undo(&storage)?;
-        }
-        Commands::Status => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::status(&storage)?;
-        }
-        Commands::Diff { staged } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::diff(&storage, staged)?;
-        }
         Commands::Update => {
             commands::update()?;
         }
-        Commands::Checkout { hash, force } => {
+        other => {
+            let cwd = std::env::current_dir()?;
+            let repo_root = crate::core::utils::find_repo_root(&cwd)?;
+            std::env::set_current_dir(&repo_root)?;
             let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::checkout(&storage, &hash, force)?;
-        }
-        Commands::Branch { name, delete } => {
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
-            commands::branch(&storage, name, delete)?;
+
+            match other {
+                Commands::Stage { path } => {
+                    let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);
+                    commands::stage(&storage, resolved_path)?;
+                }
+                Commands::Commit { message, staged, branch } => {
+                    commands::commit(&storage, message, staged, branch)?;
+                }
+                Commands::Log { all } => {
+                    commands::log(&storage, all)?;
+                }
+                Commands::Restore { path } => {
+                    let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);
+                    commands::restore(&storage, &resolved_path)?;
+                }
+                Commands::Undo => {
+                    commands::undo(&storage)?;
+                }
+                Commands::Status => {
+                    commands::status(&storage)?;
+                }
+                Commands::Diff { staged } => {
+                    commands::diff(&storage, staged)?;
+                }
+                Commands::Checkout { hash, force } => {
+                    commands::checkout(&storage, &hash, force)?;
+                }
+                Commands::Branch { name, delete } => {
+                    commands::branch(&storage, name, delete)?;
+                }
+                Commands::Init | Commands::Update => unreachable!(),
+            }
         }
     }
 
