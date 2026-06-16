@@ -67,6 +67,9 @@ fn run_cli() -> Result<()> {
                 Commands::Config { key, value, global, import_git } => {
                     commands::config(&storage, key, value, global, import_git)?;
                 }
+                Commands::Push => {
+                    commands::push::push(&storage)?;
+                }
                 Commands::Init | Commands::Update => unreachable!(),
             }
         }

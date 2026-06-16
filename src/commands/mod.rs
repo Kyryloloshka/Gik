@@ -11,6 +11,7 @@ pub mod update;
 pub mod checkout;
 pub mod branch;
 pub mod config;
+pub mod push;
 
 pub use commit::commit;
 pub use diff::diff;

@@ -89,6 +89,8 @@ pub enum Commands {
         /// The bookmark or commit hash to merge
         target: String,
     },
+    /// Push commits to remote repository
+    Push,
 }
 
 
