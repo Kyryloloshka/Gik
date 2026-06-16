@@ -15,8 +15,10 @@ pub fn push(storage: &Storage) -> Result<()> {
     
     let client = GitClient::new(remote_url, token);
     
+    let current_branch = storage.session().get_current_bookmark()?.unwrap_or_else(|| "main".to_string());
+    
     println!("Discovering remote refs...");
-    let remote_head = client.discover_refs()?;
+    let remote_head = client.discover_refs(&current_branch)?;
     
     if let Some(r_head) = remote_head {
         if r_head == current_head {

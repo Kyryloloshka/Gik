@@ -19,7 +19,7 @@ impl GitClient {
         Self { url, token, agent }
     }
 
-    pub fn discover_refs(&self) -> Result<Option<Hash>> {
+    pub fn discover_refs(&self, branch: &str) -> Result<Option<Hash>> {
         let req_url = format!("{}/info/refs?service=git-receive-pack", self.url);
         let mut req = self.agent.get(&req_url);
         
@@ -36,9 +36,10 @@ impl GitClient {
 
         let body = resp.into_string().map_err(|e| GikError::Io(std::io::Error::other(e)))?;
         
-        // Very basic pkt-line parsing for refs/heads/main
+        // Very basic pkt-line parsing for refs/heads/<branch>
+        let search_target = format!("refs/heads/{}", branch);
         for line in body.lines() {
-            if line.contains("refs/heads/main") {
+            if line.contains(&search_target) {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if let Some(hash_str) = parts.first() {
                     // Extract exactly 40 chars of hash (Git pkt-line prefixes with length, e.g., "003e<hash>")
