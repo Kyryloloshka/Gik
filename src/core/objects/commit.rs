@@ -47,7 +47,7 @@ pub fn compress_commit<W: Write>(
     Ok(())
 }
 
-fn build_commit_content(
+pub fn build_commit_content(
     tree_hash: Hash,
     parent_hashes: &[Hash],
     author: &str,

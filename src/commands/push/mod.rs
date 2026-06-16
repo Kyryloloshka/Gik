@@ -47,23 +47,45 @@ pub fn push(storage: &Storage) -> Result<()> {
     let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
     
     for hash in missing {
-        if let Some(compressed) = storage.objects().get_object(&hash)? {
-            let (obj_type, size, content) = decompress_object(&compressed[..])?;
-            let type_id = match obj_type.as_str() {
-                "commit" => 1,
-                "tree" => 2,
-                "blob" => 3,
-                _ => continue,
+        let (obj_type, size, content) = if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
+            let (author_name, author_email) = if let Some(open) = meta.author.find('<') {
+                if let Some(close) = meta.author.find('>') {
+                    (meta.author[..open].trim(), &meta.author[open+1..close])
+                } else {
+                    (meta.author.as_str(), "")
+                }
+            } else {
+                (meta.author.as_str(), "")
             };
             
-            write_object_header(&mut temp_pack, type_id, size as usize, &mut dummy_hasher)?;
-            
-            use std::io::Write;
-            let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-            encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-            let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-            temp_pack.extend_from_slice(&zlibbed);
-        }
+            let payload = crate::core::objects::commit::build_commit_content(
+                meta.tree_hash,
+                &meta.parent_hashes,
+                author_name,
+                author_email,
+                meta.timestamp,
+                &meta.message,
+            ).into_bytes();
+            (1u8, payload.len(), payload)
+        } else if let Some(compressed) = storage.objects().get_object(&hash)? {
+            let (type_str, size, payload) = decompress_object(&compressed[..])?;
+            let type_id = match type_str.as_str() {
+                "tree" => 2u8,
+                "blob" => 3u8,
+                _ => return Err(crate::error::GikError::Io(std::io::Error::other("Unknown object type in storage"))),
+            };
+            (type_id, size as usize, payload)
+        } else {
+            return Err(crate::error::GikError::Io(std::io::Error::other(format!("Missing object {}", hash))));
+        };
+        
+        write_object_header(&mut temp_pack, obj_type, size, &mut dummy_hasher)?;
+        
+        use std::io::Write;
+        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        temp_pack.extend_from_slice(&zlibbed);
     }
     
     let checksum = Sha1::digest(&temp_pack);

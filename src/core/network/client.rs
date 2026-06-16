@@ -66,7 +66,7 @@ impl GitClient {
         // Pkt-line format: <old_hash> <new_hash> refs/heads/main\0report-status
         let old_hash = remote_head.map(|h| h.to_string()).unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
         let new_hash = local_head.to_string();
-        let cmd = format!("{} {} refs/heads/main\0", old_hash, new_hash);
+        let cmd = format!("{} {} refs/heads/main\0report-status", old_hash, new_hash);
         
         // pkt-line prefix is length in hex (cmd length + 4)
         let pkt_len = cmd.len() + 4;
