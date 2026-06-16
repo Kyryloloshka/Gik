@@ -75,3 +75,56 @@ pub fn build_commit_content(
     }
     content
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_commit_content_single_parent() {
+        let tree_hash = Hash([1; 20]);
+        let parent = Hash([2; 20]);
+        
+        let content = build_commit_content(
+            tree_hash,
+            &[parent],
+            "Linus Torvalds",
+            "torvalds@linux-foundation.org",
+            1718500000,
+            "Initial release"
+        );
+
+        let expected = format!(
+            "tree {}\nparent {}\nauthor Linus Torvalds <torvalds@linux-foundation.org> 1718500000 +0000\ncommitter Linus Torvalds <torvalds@linux-foundation.org> 1718500000 +0000\n\nInitial release\n",
+            hex::encode([1; 20]),
+            hex::encode([2; 20])
+        );
+
+        assert_eq!(content, expected);
+    }
+
+    #[test]
+    fn test_build_commit_content_merge_commit() {
+        let tree_hash = Hash([1; 20]);
+        let parent1 = Hash([2; 20]);
+        let parent2 = Hash([3; 20]);
+        
+        let content = build_commit_content(
+            tree_hash,
+            &[parent1, parent2],
+            "John Doe",
+            "john@example.com",
+            1718500000,
+            "Merge branch 'feature'\n\nCloses #123"
+        );
+
+        let expected = format!(
+            "tree {}\nparent {}\nparent {}\nauthor John Doe <john@example.com> 1718500000 +0000\ncommitter John Doe <john@example.com> 1718500000 +0000\n\nMerge branch 'feature'\n\nCloses #123\n",
+            hex::encode([1; 20]),
+            hex::encode([2; 20]),
+            hex::encode([3; 20])
+        );
+
+        assert_eq!(content, expected);
+    }
+}

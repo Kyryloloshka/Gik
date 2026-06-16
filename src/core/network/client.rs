@@ -36,22 +36,7 @@ impl GitClient {
 
         let body = resp.into_string().map_err(|e| GikError::Io(std::io::Error::other(e)))?;
         
-        // Very basic pkt-line parsing for refs/heads/<branch>
-        let search_target = format!("refs/heads/{}", branch);
-        for line in body.lines() {
-            if line.contains(&search_target) {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if let Some(hash_str) = parts.first() {
-                    // Extract exactly 40 chars of hash (Git pkt-line prefixes with length, e.g., "003e<hash>")
-                    let clean_hash = if hash_str.len() > 40 { &hash_str[hash_str.len()-40..] } else { hash_str };
-                    if let Ok(hash) = Hash::from_hex(clean_hash) {
-                        return Ok(Some(hash));
-                    }
-                }
-            }
-        }
-        
-        Ok(None)
+        Ok(parse_discover_refs_body(&body, branch))
     }
 
     pub fn push_packfile(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: &[u8], branch: &str) -> Result<()> {
@@ -102,7 +87,45 @@ mod tests {
 
     #[test]
     fn test_client_init() {
-        let client = GitClient::new("https://example.com/repo.git".to_string(), None);
-        assert_eq!(client.url, "https://example.com/repo.git");
+        let client = GitClient::new("https://github.com/test".to_string(), None);
+        assert_eq!(client.url, "https://github.com/test");
+        assert_eq!(client.token, None);
     }
+
+    #[test]
+    fn test_parse_discover_refs_body_found() {
+        let body = "001e# service=git-receive-pack\n\
+                    000000a4fd4bf91c3700325211bbcf1b35f2178f04552506 HEAD\\0multi_ack ...\n\
+                    003ffd4bf91c3700325211bbcf1b35f2178f04552506 refs/heads/main\n\
+                    003f1b2871621c5b764b8637fc5873a17989e7f0805d refs/heads/soska\n\
+                    0000";
+        
+        let hash_main = parse_discover_refs_body(body, "main").unwrap();
+        assert_eq!(hash_main.to_string(), "fd4bf91c3700325211bbcf1b35f2178f04552506");
+
+        let hash_soska = parse_discover_refs_body(body, "soska").unwrap();
+        assert_eq!(hash_soska.to_string(), "1b2871621c5b764b8637fc5873a17989e7f0805d");
+    }
+
+    #[test]
+    fn test_parse_discover_refs_body_not_found() {
+        let body = "001e# service=git-receive-pack\n0000";
+        assert_eq!(parse_discover_refs_body(body, "main"), None);
+    }
+}
+
+fn parse_discover_refs_body(body: &str, branch: &str) -> Option<Hash> {
+    let search_target = format!("refs/heads/{}", branch);
+    for line in body.lines() {
+        if line.contains(&search_target) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(hash_str) = parts.first() {
+                let clean_hash = if hash_str.len() > 40 { &hash_str[hash_str.len()-40..] } else { hash_str };
+                if let Ok(hash) = Hash::from_hex(clean_hash) {
+                    return Some(hash);
+                }
+            }
+        }
+    }
+    None
 }

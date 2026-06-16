@@ -188,3 +188,6 @@ fn write_content_to_disk(content: &[u8], path: &str) -> Result<()> {
     fs::write(path, content)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
