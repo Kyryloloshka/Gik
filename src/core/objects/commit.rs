@@ -63,6 +63,10 @@ fn build_commit_content(
         "author {} <{}> {} +0000\n",
         author, email, timestamp
     ));
+    content.push_str(&format!(
+        "committer {} <{}> {} +0000\n",
+        author, email, timestamp
+    ));
     content.push('\n');
     content.push_str(message);
 
