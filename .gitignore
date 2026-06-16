@@ -1,4 +1,4 @@
-дав# Rust
+# Rust
 /target
 Cargo.lock
 
@@ -10,6 +10,12 @@ docs/
 MEMORY.md
 AGENTS.md
 GEMINI.md
+Antigravity.md
+
+# Environment variables
+.env
+.env.*
+!.env.example
 
 # Logs
 *.log
