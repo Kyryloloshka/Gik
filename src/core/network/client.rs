@@ -2,6 +2,7 @@ use crate::error::{Result, GikError};
 use crate::core::hash::Hash;
 use ureq::{Agent, AgentBuilder};
 use std::time::Duration;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 pub struct GitClient {
     url: String,
@@ -23,7 +24,8 @@ impl GitClient {
         let mut req = self.agent.get(&req_url);
         
         if let Some(t) = &self.token {
-            req = req.set("Authorization", &format!("Bearer {}", t));
+            let auth = STANDARD.encode(format!("git:{}", t));
+            req = req.set("Authorization", &format!("Basic {}", auth));
         }
 
         let resp = req.call().map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
@@ -57,7 +59,8 @@ impl GitClient {
             .set("Content-Type", "application/x-git-receive-pack-request");
             
         if let Some(t) = &self.token {
-            req = req.set("Authorization", &format!("Bearer {}", t));
+            let auth = STANDARD.encode(format!("git:{}", t));
+            req = req.set("Authorization", &format!("Basic {}", auth));
         }
 
         // Pkt-line format: <old_hash> <new_hash> refs/heads/main\0report-status
