@@ -157,6 +157,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         println!("All conflicts resolved!");
     }
     
+    storage.session().set_merge_head(&full_hash)?;
     println!("Merge files staged. Run `gik commit` to finalize the merge.");
 
     Ok(())
