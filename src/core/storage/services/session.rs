@@ -35,4 +35,37 @@ impl<'a> SessionService<'a> {
         write_txn.commit()?;
         Ok(())
     }
+
+    const MERGE_HEAD_KEY: &'static str = "merge_head";
+
+    pub fn set_merge_head(&self, hash: &crate::core::hash::Hash) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(SESSION)?;
+            table.insert(Self::MERGE_HEAD_KEY, hash.to_string().as_str())?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    pub fn get_merge_head(&self) -> Result<Option<crate::core::hash::Hash>> {
+        let read_txn = self.repo.db.begin_read()?;
+        let table = read_txn.open_table(SESSION)?;
+        if let Some(hash_str) = table.get(Self::MERGE_HEAD_KEY)? {
+            let hash = crate::core::hash::Hash::from_hex(hash_str.value()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            Ok(Some(hash))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn clear_merge_head(&self) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(SESSION)?;
+            table.remove(Self::MERGE_HEAD_KEY)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
 }

@@ -30,11 +30,16 @@ pub fn commit(storage: &Storage, message: String, staged: bool, explicit_branch:
 
     // 4. Get current HEAD (parent)
     let parent_hash = storage.commits().get_current_head()?;
-    let parent_hashes = if let Some(p) = parent_hash {
+    let mut parent_hashes = if let Some(p) = parent_hash {
         vec![p]
     } else {
         vec![]
     };
+    
+    if let Some(merge_head) = storage.session().get_merge_head()? {
+        parent_hashes.push(merge_head);
+        storage.session().clear_merge_head()?;
+    }
 
     // 5. Create Commit object
     let author_name = storage.config().get("user.name")?;
