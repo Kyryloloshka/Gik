@@ -140,38 +140,41 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     Ok(())
 }
 
+use ignore::WalkBuilder;
+
 fn get_disk_state() -> Result<HashMap<String, Hash>> {
     let mut disk_files = HashMap::new();
-    let matcher = IgnoreMatcher::new();
     let root = std::env::current_dir()?;
-    let mut stack = vec![root.clone()];
 
-    while let Some(current_dir) = stack.pop() {
-        for entry in std::fs::read_dir(&current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+    let mut builder = WalkBuilder::new(&root);
+    builder.add_custom_ignore_filename(".gik.ignore");
+    builder.hidden(false); // Do not skip hidden files like .env
+    
+    builder.filter_entry(move |entry| {
+        let name = entry.file_name().to_string_lossy();
+        name != crate::config::DB_PATH && name != ".git" && !name.contains("gik_test")
+    });
 
-            // Get path relative to the repository root
-            let relative_path = path.strip_prefix(&root)
-                .map_err(std::io::Error::other)?;
-            let path_str = relative_path.to_str().unwrap_or("");
-            
-            if path_str.is_empty() { continue; }
+    for result in builder.build() {
+        let entry = match result {
+            Ok(e) => e,
+            Err(_) => continue, // Skip files we don't have access to
+        };
+        if entry.file_type().map_or(true, |ft| ft.is_dir()) {
+            continue;
+        }
 
-            // Normalize separators to forward slashes for the ignore matcher
-            let normalized_path = path_str.replace('\\', "/");
-
-            if matcher.is_ignored(&normalized_path) {
-                continue;
-            }
-
-            if entry.file_type()?.is_dir() {
-                stack.push(path);
-            } else {
-                let metadata = entry.metadata()?;
-                let file = std::fs::File::open(&path)?;
-                let hash = crate::core::objects::hash_blob(file, metadata.len())?;
-                disk_files.insert(normalized_path, hash);
+        let path = entry.path();
+        let relative_path = path.strip_prefix(&root).unwrap_or(path);
+        let path_str = relative_path.to_str().unwrap_or("");
+        if path_str.is_empty() { continue; }
+        
+        let normalized_path = path_str.replace('\\', "/");
+        if let Ok(metadata) = entry.metadata() {
+            if let Ok(file) = std::fs::File::open(path) {
+                if let Ok(hash) = crate::core::objects::hash_blob(file, metadata.len()) {
+                    disk_files.insert(normalized_path, hash);
+                }
             }
         }
     }
@@ -179,36 +182,36 @@ fn get_disk_state() -> Result<HashMap<String, Hash>> {
     Ok(disk_files)
 }
 
-fn scan_and_stage(storage: &Storage, matcher: &IgnoreMatcher) -> Result<()> {
+fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
     let root = std::env::current_dir()?;
-    let mut stack = vec![root.clone()];
-    
-    while let Some(current_dir) = stack.pop() {
-        for entry in std::fs::read_dir(&current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            
-            let relative_path = path.strip_prefix(&root)
-                .map_err(std::io::Error::other)?;
-            let path_str = relative_path.to_str().unwrap_or("");
-            
-            if path_str.is_empty() { continue; }
-            
-            // Normalize separators to forward slashes
-            let normalized_path = path_str.replace('\\', "/");
-            
-            if matcher.is_ignored(&normalized_path) {
-                continue;
-            }
 
-            if entry.file_type()?.is_dir() {
-                stack.push(path);
-            } else {
-                // It's a file, stage it
-                crate::commands::stage::stage(storage, normalized_path)?;
-            }
+    let mut builder = WalkBuilder::new(&root);
+    builder.add_custom_ignore_filename(".gik.ignore");
+    builder.hidden(false);
+    
+    builder.filter_entry(move |entry| {
+        let name = entry.file_name().to_string_lossy();
+        name != crate::config::DB_PATH && name != ".git" && !name.contains("gik_test")
+    });
+
+    for result in builder.build() {
+        let entry = match result {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.file_type().map_or(true, |ft| ft.is_dir()) {
+            continue;
         }
+
+        let path = entry.path();
+        let relative_path = path.strip_prefix(&root).unwrap_or(path);
+        let path_str = relative_path.to_str().unwrap_or("");
+        if path_str.is_empty() { continue; }
+        
+        let normalized_path = path_str.replace('\\', "/");
+        crate::commands::stage::stage(storage, normalized_path)?;
     }
+
     Ok(())
 }
 

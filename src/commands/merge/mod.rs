@@ -52,7 +52,20 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     
     if lca == Some(current_head) {
         println!("Fast-forwarding to {}", full_hash);
-        crate::commands::checkout::checkout(storage, target, false)?;
+        
+        // Update current branch reference if we are on a branch
+        let current_bookmark = storage.session().get_current_bookmark()?;
+        if let Some(ref bm) = current_bookmark {
+            storage.refs().set_ref(bm, &full_hash)?;
+        }
+        
+        // Restore workspace and index
+        let meta = storage.commits().get_commit_meta(&full_hash)?.unwrap();
+        crate::core::workspace::restore_workspace(storage, &full_hash)?;
+        let tree_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
+        storage.index().set_index_state(&tree_files)?;
+        storage.commits().set_head(&full_hash)?;
+        
         return Ok(());
     }
 

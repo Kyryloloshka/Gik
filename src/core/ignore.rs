@@ -1,8 +1,8 @@
-use glob::Pattern;
-use std::fs;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use std::path::Path;
 
 pub struct IgnoreMatcher {
-    patterns: Vec<Pattern>,
+    gitignore: Gitignore,
 }
 
 impl Default for IgnoreMatcher {
@@ -13,49 +13,39 @@ impl Default for IgnoreMatcher {
 
 impl IgnoreMatcher {
     pub fn new() -> Self {
-        let mut patterns = Vec::new();
+        let mut builder = GitignoreBuilder::new("");
 
         // Hardcoded defaults
-        // Using more specific patterns to avoid over-matching (like .github)
-        patterns.push(Pattern::new(crate::config::DB_PATH).unwrap());
+        let _ = builder.add_line(None, crate::config::DB_PATH);
         let db_glob = format!("{}/**", crate::config::DB_PATH);
-        patterns.push(Pattern::new(&db_glob).unwrap());
-        patterns.push(Pattern::new(".git").unwrap());
-        patterns.push(Pattern::new(".git/**").unwrap());
-        patterns.push(Pattern::new("*gik_test*").unwrap()); // For our tests
-
+        let _ = builder.add_line(None, &db_glob);
+        let _ = builder.add_line(None, ".git");
+        let _ = builder.add_line(None, ".git/**");
+        let _ = builder.add_line(None, "*gik_test*");
 
         // Load from .gik.ignore
-
-        if let Ok(content) = fs::read_to_string(".gik.ignore") {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    continue;
-                }
-                if let Ok(pattern) = Pattern::new(trimmed) {
-                    patterns.push(pattern);
-                }
+        let ignore_path = Path::new(".gik.ignore");
+        if ignore_path.exists() {
+            if let Some(err) = builder.add(ignore_path) {
+                eprintln!("Warning: Error parsing .gik.ignore: {}", err);
             }
         }
 
-        Self { patterns }
+        let gitignore = builder.build().unwrap();
+
+        Self { gitignore }
     }
 
     pub fn is_ignored(&self, path: &str) -> bool {
-        // Normalize path for matching (simple string matching for now)
-        for pattern in &self.patterns {
-            if pattern.matches(path) {
-                return true;
-            }
-        }
-        false
+        // We'll pass is_dir=false as a heuristic.
+        self.gitignore.matched(path, false).is_ignore()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::io::Write;
     use tempfile::tempdir;
 

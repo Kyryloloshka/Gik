@@ -45,7 +45,7 @@ pub fn push(storage: &Storage) -> Result<()> {
     println!("Compressing {} objects into Packfile...", missing.len());
     
     let mut dummy_hasher = Sha1::new();
-    let mut temp_pack = Vec::new();
+    let mut temp_pack = tempfile::tempfile().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
     let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
     
     for hash in missing {
@@ -87,15 +87,31 @@ pub fn push(storage: &Storage) -> Result<()> {
         let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
         encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
         let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-        temp_pack.extend_from_slice(&zlibbed);
+        temp_pack.write_all(&zlibbed).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
     }
     
-    let checksum = Sha1::digest(&temp_pack);
-    temp_pack.extend_from_slice(&checksum);
+    // We must manually compute checksum for the whole file. 
+    // This is not perfectly streaming because we read it back once, but it solves the memory issue.
+    use std::io::{Read, Seek, SeekFrom};
+    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    let mut real_hasher = Sha1::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let n = temp_pack.read(&mut buffer).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        if n == 0 { break; }
+        real_hasher.update(&buffer[..n]);
+    }
+    let checksum = real_hasher.finalize();
+    temp_pack.seek(SeekFrom::End(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    use std::io::Write;
+    temp_pack.write_all(&checksum).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    
+    // Reset cursor to start for sending
+    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
     
     let current_branch = storage.session().get_current_bookmark()?.unwrap_or_else(|| "main".to_string());
     
-    client.push_packfile(&current_head, remote_head.as_ref(), &temp_pack, &current_branch)?;
+    client.push_packfile(&current_head, remote_head.as_ref(), temp_pack, &current_branch)?;
     println!("Push successful!");
     
     Ok(())

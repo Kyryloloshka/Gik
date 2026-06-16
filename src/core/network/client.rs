@@ -39,7 +39,7 @@ impl GitClient {
         Ok(parse_discover_refs_body(&body, branch))
     }
 
-    pub fn push_packfile(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: &[u8], branch: &str) -> Result<()> {
+    pub fn push_packfile<R: std::io::Read>(&self, local_head: &Hash, remote_head: Option<&Hash>, mut packfile: R, branch: &str) -> Result<()> {
         let req_url = format!("{}/git-receive-pack", self.url);
         let mut req = self.agent.post(&req_url)
             .set("Content-Type", "application/x-git-receive-pack-request");
@@ -62,12 +62,14 @@ impl GitClient {
         // Then standard flush packet "0000"
         let flush_pkt = "0000";
         
-        let mut payload = Vec::new();
-        payload.extend_from_slice(pkt_line.as_bytes());
-        payload.extend_from_slice(flush_pkt.as_bytes());
-        payload.extend_from_slice(packfile);
+        let mut prefix = Vec::new();
+        prefix.extend_from_slice(pkt_line.as_bytes());
+        prefix.extend_from_slice(flush_pkt.as_bytes());
 
-        let resp = req.send_bytes(&payload).map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
+        use std::io::Read;
+        let reader = std::io::Cursor::new(prefix).chain(packfile);
+
+        let resp = req.send(reader).map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
         
         if resp.status() != 200 {
             return Err(GikError::Io(std::io::Error::other(format!("HTTP Error during push: {}", resp.status()))));
