@@ -7,6 +7,7 @@ pub mod objects;
 pub mod storage;
 pub mod utils;
 pub mod workspace;
+pub mod pack;
 
 pub use graph::*;
 pub use hash::*;
