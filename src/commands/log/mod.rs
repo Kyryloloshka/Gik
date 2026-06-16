@@ -1,18 +1,15 @@
 use crate::error::Result;
 use crate::core::storage::Storage;
 use crate::core::hash::Hash;
-use std::collections::{HashSet, VecDeque, HashMap};
+use crate::core::CommitMeta;
+use std::collections::{HashSet, HashMap};
 use colored::*;
-
-pub mod graph;
-use graph::GraphRenderer;
-
+use renderdag::{GraphRenderer, Node, RenderConfig};
 
 pub fn log(storage: &Storage, all: bool, graph: bool) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
     
-    // Map of commit hash -> list of branch/bookmark names
     let mut labels: HashMap<Hash, Vec<String>> = HashMap::new();
     for (name, hash) in &refs {
         labels.entry(*hash).or_default().push(name.clone());
@@ -21,113 +18,140 @@ pub fn log(storage: &Storage, all: bool, graph: bool) -> Result<()> {
         labels.entry(h).or_default().push("HEAD".to_string());
     }
 
-    let mut renderer = if graph { Some(GraphRenderer::new()) } else { None };
+    let mut start_hashes = HashSet::new();
+    if all {
+        if let Some(h) = head { start_hashes.insert(h); }
+        for (_, hash) in &refs { start_hashes.insert(*hash); }
+    } else {
+        if let Some(h) = head { start_hashes.insert(h); }
+    }
 
-    if !all {
-        // Standard linear log from HEAD
-        if head.is_none() {
-            println!("No commits yet");
-            return Ok(());
+    if start_hashes.is_empty() {
+        println!("No commits yet");
+        return Ok(());
+    }
+
+    // Topological sort using DFS
+    let mut visited = HashSet::new();
+    let mut sorted_commits = Vec::new();
+
+    fn dfs(
+        hash: Hash, 
+        storage: &Storage, 
+        visited: &mut HashSet<Hash>, 
+        sorted: &mut Vec<(Hash, CommitMeta)>
+    ) {
+        if visited.contains(&hash) { return; }
+        visited.insert(hash);
+        if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
+            // Visit parents first
+            for parent in &meta.parent_hashes {
+                dfs(*parent, storage, visited, sorted);
+            }
+            // Push self
+            sorted.push((hash, meta));
+        }
+    }
+
+    // To ensure deterministic tie-breaking and prefer newer commits in the sort,
+    // we should process start_hashes by timestamp. But DFS naturally groups branches.
+    // For simplicity, just run DFS.
+    let mut heads: Vec<Hash> = start_hashes.into_iter().collect();
+    // Sort heads by timestamp so we traverse the newest branch first
+    heads.sort_by_key(|h| {
+        storage.commits().get_commit_meta(h).ok().flatten().map(|m| std::cmp::Reverse(m.timestamp)).unwrap_or(std::cmp::Reverse(0))
+    });
+
+    for head_hash in heads {
+        dfs(head_hash, storage, &mut visited, &mut sorted_commits);
+    }
+    sorted_commits.reverse(); // Now children come before parents
+
+    if graph {
+        let mut dag_nodes = Vec::new();
+        for (hash, meta) in &sorted_commits {
+            dag_nodes.push(Node::new(
+                hash.to_string(),
+                meta.parent_hashes.iter().map(|h| h.to_string()).collect()
+            ));
         }
 
-        let mut current_hash = head;
-        while let Some(hash) = current_hash {
-            if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
-                let prefixes = renderer.as_mut().map(|r| r.process_commit(&hash, &meta.parent_hashes));
-                print_commit(storage, &hash, &labels, prefixes.as_ref())?;
-                current_hash = meta.parent_hashes.first().copied();
-            } else {
-                break;
-            }
+        let mut renderer = GraphRenderer::new(RenderConfig::default());
+        let actual_glyphs = renderer.render_to_string(&dag_nodes);
+        let mut rendered_lines = actual_glyphs.lines();
+
+        for (hash, meta) in sorted_commits {
+            let graph_line = rendered_lines.next().unwrap_or("");
+            print_commit_graph(hash, meta, &labels, graph_line);
         }
     } else {
-        // Log --all: traverse from all refs and HEAD
-        let mut start_hashes = HashSet::new();
-        if let Some(h) = head { start_hashes.insert(h); }
-        for (_, hash) in &refs {
-            start_hashes.insert(*hash);
-        }
-
-        if start_hashes.is_empty() {
-            println!("No commits yet");
-            return Ok(());
-        }
-
-        let mut visited = HashSet::new();
-        let mut queue: VecDeque<Hash> = start_hashes.into_iter().collect();
-        let mut all_commits = Vec::new();
-
-        while let Some(hash) = queue.pop_front() {
-            if visited.contains(&hash) {
-                continue;
-            }
-            visited.insert(hash);
-            
-            if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
-                for parent in &meta.parent_hashes {
-                    queue.push_back(*parent);
-                }
-                all_commits.push((hash, meta));
-            }
-        }
-
-        // Sort by timestamp descending
-        all_commits.sort_by_key(|b| std::cmp::Reverse(b.1.timestamp));
-
-        for (hash, meta) in all_commits {
-            let prefixes = renderer.as_mut().map(|r| r.process_commit(&hash, &meta.parent_hashes));
-            print_commit(storage, &hash, &labels, prefixes.as_ref())?;
+        for (hash, meta) in sorted_commits {
+            print_commit_linear(hash, meta, &labels);
         }
     }
 
     Ok(())
 }
 
-fn print_commit(
-    storage: &Storage, 
-    hash: &Hash, 
+fn graph_padding(rendered_line: &str) -> String {
+    rendered_line.chars().map(|c| match c {
+        // Nodes that continue downwards
+        '⊗' | '⍟' | '●' | '⦿' => '│',
+        // Connections that continue downwards
+        '│' | '╭' | '╮' | '┬' | '┤' | '├' | '╷' | '┊' => '│',
+        // Everything else (Nodes that end, connections that go horizontally or up)
+        _ => ' ',
+    }).collect()
+}
+
+fn print_commit_graph(
+    hash: Hash, 
+    meta: CommitMeta, 
     labels: &HashMap<Hash, Vec<String>>,
-    graph_prefixes: Option<&(String, String, Vec<String>)>
-) -> Result<()> {
-    if let Some(meta) = storage.commits().get_commit_meta(hash)? {
-        let (commit_prefix, msg_prefix, transitions) = match graph_prefixes {
-            Some((c, m, t)) => (c.as_str(), m.as_str(), t.as_slice()),
-            None => ("", "", &[][..]),
-        };
-
-        let mut line = format!("{}commit {}", commit_prefix, hash).yellow().to_string();
-        
-        if let Some(names) = labels.get(hash) {
-            let label_str = names.join(", ");
-            line.push_str(&format!(" ({})", label_str).cyan().bold().to_string());
-        }
-        
-        println!("{}", line);
-        for trans in transitions {
-            println!("{}", trans);
-        }
-
-        println!("{}Author: {}", msg_prefix, meta.author);
-        
-        let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
-            .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
-            .unwrap_or_else(|| "Unknown date".to_string());
-        println!("{}Date:   {}", msg_prefix, datetime);
-        println!("{}", msg_prefix);
-        
-        let message_lines: Vec<&str> = meta.message.lines().collect();
-        if message_lines.is_empty() {
-            println!("{}", msg_prefix);
-        } else {
-            for msg_line in message_lines {
-                println!("{}    {}", msg_prefix, msg_line);
-            }
-            println!("{}", msg_prefix);
-        }
+    graph_line: &str
+) {
+    let padding = graph_padding(graph_line);
+    
+    let mut header = format!("commit {}", hash).yellow().to_string();
+    if let Some(names) = labels.get(&hash) {
+        header.push_str(&format!(" ({})", names.join(", ")).cyan().bold().to_string());
     }
-    Ok(())
+
+    println!("{} {}", graph_line.yellow(), header);
+    println!("{} Author: {}", padding.yellow(), meta.author);
+    
+    let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
+        .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
+        .unwrap_or_else(|| "Unknown date".to_string());
+    println!("{} Date:   {}", padding.yellow(), datetime);
+    println!("{}", padding.yellow());
+    
+    for msg_line in meta.message.lines() {
+        println!("{}     {}", padding.yellow(), msg_line);
+    }
 }
 
+fn print_commit_linear(
+    hash: Hash, 
+    meta: CommitMeta, 
+    labels: &HashMap<Hash, Vec<String>>
+) {
+    let mut header = format!("commit {}", hash).yellow().to_string();
+    if let Some(names) = labels.get(&hash) {
+        header.push_str(&format!(" ({})", names.join(", ")).cyan().bold().to_string());
+    }
 
-#[cfg(test)]
-mod tests;
+    println!("{}", header);
+    println!("Author: {}", meta.author);
+    
+    let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
+        .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
+        .unwrap_or_else(|| "Unknown date".to_string());
+    println!("Date:   {}", datetime);
+    println!();
+    
+    for msg_line in meta.message.lines() {
+        println!("    {}", msg_line);
+    }
+    println!();
+}

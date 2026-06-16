@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "gik"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "base64",
  "bincode",
@@ -681,6 +681,7 @@ dependencies = [
  "hex",
  "ignore",
  "redb",
+ "renderdag",
  "self_update",
  "serde",
  "sha1",
@@ -1357,6 +1358,12 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "renderdag"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "059ba6bcca92be2f59df9dae8205bbd7197cab946406f5fff29a5f48244b1105"
 
 [[package]]
 name = "reqwest"
