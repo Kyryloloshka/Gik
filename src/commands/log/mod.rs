@@ -103,6 +103,10 @@ fn print_commit(
         }
         
         println!("{}", line);
+        for trans in transitions {
+            println!("{}", trans);
+        }
+
         println!("{}Author: {}", msg_prefix, meta.author);
         
         let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
@@ -119,10 +123,6 @@ fn print_commit(
                 println!("{}    {}", msg_prefix, msg_line);
             }
             println!("{}", msg_prefix);
-        }
-
-        for trans in transitions {
-            println!("{}", trans);
         }
     }
     Ok(())

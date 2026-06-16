@@ -19,13 +19,25 @@ impl GraphRenderer {
     }
 
     pub fn process_commit(&mut self, current: &Hash, parents: &[Hash]) -> (String, String, Vec<String>) {
-        let pos = match self.columns.iter().position(|h| h == current) {
+        let mut pos = match self.columns.iter().position(|h| h == current) {
             Some(p) => p,
             None => {
                 self.columns.push(*current);
                 self.columns.len() - 1
             }
         };
+
+        // Collapse any duplicate pointers to the current commit
+        let mut to_remove = Vec::new();
+        for (i, col) in self.columns.iter().enumerate() {
+            if i != pos && col == current {
+                to_remove.push(i);
+            }
+        }
+        for i in to_remove.into_iter().rev() {
+            self.columns.remove(i);
+            if i < pos { pos -= 1; }
+        }
 
         let mut commit_prefix = String::new();
         for i in 0..self.columns.len() {
@@ -42,7 +54,18 @@ impl GraphRenderer {
         if parents.is_empty() {
             self.columns.remove(pos);
         } else {
-            self.columns[pos] = parents[0];
+            let p0 = parents[0];
+            if let Some(existing_pos) = self.columns.iter().position(|h| h == &p0) {
+                if existing_pos != pos {
+                    // Parent is already tracked elsewhere, so this branch merges into it
+                    self.columns.remove(pos);
+                } else {
+                    self.columns[pos] = p0;
+                }
+            } else {
+                self.columns[pos] = p0;
+            }
+
             let mut added = 0;
             for parent in parents.iter().skip(1) {
                 if !self.columns.contains(parent) {
