@@ -54,36 +54,51 @@ impl GraphRenderer {
         if parents.is_empty() {
             self.columns.remove(pos);
         } else {
-            let p0 = parents[0];
-            if let Some(existing_pos) = self.columns.iter().position(|h| h == &p0) {
-                if existing_pos != pos {
-                    // Parent is already tracked elsewhere, so this branch merges into it
-                    self.columns.remove(pos);
+            let mut existing_parents = Vec::new();
+            let mut parents_to_add = Vec::new();
+            for p in parents {
+                if let Some(idx) = self.columns.iter().position(|h| h == p) {
+                    existing_parents.push(idx);
                 } else {
-                    self.columns[pos] = p0;
+                    parents_to_add.push(*p);
                 }
-            } else {
-                self.columns[pos] = p0;
             }
 
             let mut added = 0;
-            for parent in parents.iter().skip(1) {
-                if !self.columns.contains(parent) {
-                    self.columns.push(*parent);
+            let mut removed = false;
+
+            if parents_to_add.is_empty() {
+                self.columns.remove(pos);
+                removed = true;
+            } else {
+                self.columns[pos] = parents_to_add[0];
+                for p in parents_to_add.iter().skip(1) {
+                    self.columns.push(*p);
                     added += 1;
                 }
             }
 
-            if added > 0 {
+            let is_merge = parents.len() > 1;
+            let merged_left = existing_parents.iter().any(|&idx| idx < pos);
+            
+            if is_merge || added > 0 || removed {
                 let mut trans = String::new();
                 for i in 0..old_len {
                     if i == pos {
-                        trans.push_str("|\\");
+                        if removed {
+                            if merged_left { trans.push_str("|/"); } else { trans.push_str("|\\"); }
+                        } else if added > 0 {
+                            trans.push_str("|\\");
+                        } else if is_merge {
+                            if merged_left { trans.push_str("|/"); } else { trans.push_str("|\\"); }
+                        } else {
+                            trans.push_str("| ");
+                        }
                     } else {
                         trans.push_str("| ");
                     }
                 }
-                for _ in 1..added {
+                for _ in 0..added {
                     trans.push_str("\\ ");
                 }
                 transitions.push(trans);
