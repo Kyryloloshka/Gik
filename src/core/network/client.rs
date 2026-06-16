@@ -50,6 +50,45 @@ impl GitClient {
         
         Ok(None)
     }
+
+    pub fn push_packfile(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: &[u8]) -> Result<()> {
+        let req_url = format!("{}/git-receive-pack", self.url);
+        let mut req = self.agent.post(&req_url)
+            .set("Content-Type", "application/x-git-receive-pack-request");
+            
+        if let Some(t) = &self.token {
+            req = req.set("Authorization", &format!("Bearer {}", t));
+        }
+
+        // Pkt-line format: <old_hash> <new_hash> refs/heads/main\0report-status
+        let old_hash = remote_head.map(|h| h.to_string()).unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
+        let new_hash = local_head.to_string();
+        let cmd = format!("{} {} refs/heads/main\0", old_hash, new_hash);
+        
+        // pkt-line prefix is length in hex (cmd length + 4)
+        let pkt_len = cmd.len() + 4;
+        let pkt_line = format!("{:04x}{}", pkt_len, cmd);
+        
+        // Then standard flush packet "0000"
+        let flush_pkt = "0000";
+        
+        let mut payload = Vec::new();
+        payload.extend_from_slice(pkt_line.as_bytes());
+        payload.extend_from_slice(flush_pkt.as_bytes());
+        payload.extend_from_slice(packfile);
+
+        let resp = req.send_bytes(&payload).map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
+        
+        if resp.status() != 200 {
+            return Err(GikError::Io(std::io::Error::other(format!("HTTP Error during push: {}", resp.status()))));
+        }
+        
+        // Print remote response (e.g., unpack ok)
+        let body = resp.into_string().map_err(|e| GikError::Io(std::io::Error::other(e)))?;
+        println!("Server responded:\n{}", body);
+        
+        Ok(())
+    }
 }
 
 #[cfg(test)]
