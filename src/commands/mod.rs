@@ -2,6 +2,7 @@ pub mod commit;
 pub mod diff;
 pub mod init;
 pub mod log;
+pub mod merge;
 pub mod restore;
 pub mod stage;
 pub mod status;

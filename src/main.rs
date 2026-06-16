@@ -59,7 +59,10 @@ fn run_cli() -> Result<()> {
                     commands::checkout(&storage, &hash, force)?;
                 }
                 Commands::Branch { name, delete } => {
-                    commands::branch(&storage, name, delete)?;
+                    commands::branch::branch(&storage, name, delete)?;
+                }
+                Commands::Merge { target } => {
+                    commands::merge::merge(&storage, &target)?;
                 }
                 Commands::Config { key, value, global, import_git } => {
                     commands::config(&storage, key, value, global, import_git)?;

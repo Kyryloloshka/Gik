@@ -84,6 +84,11 @@ pub enum Commands {
         #[arg(short, long)]
         delete: bool,
     },
+    /// Merge another bookmark or commit into the current branch
+    Merge {
+        /// The bookmark or commit hash to merge
+        target: String,
+    },
 }
 
 
