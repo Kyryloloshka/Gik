@@ -53,20 +53,21 @@ impl GitClient {
         Ok(None)
     }
 
-    pub fn push_packfile(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: &[u8]) -> Result<()> {
+    pub fn push_packfile(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: &[u8], branch: &str) -> Result<()> {
         let req_url = format!("{}/git-receive-pack", self.url);
         let mut req = self.agent.post(&req_url)
             .set("Content-Type", "application/x-git-receive-pack-request");
             
         if let Some(t) = &self.token {
+            use base64::{Engine as _, engine::general_purpose::STANDARD};
             let auth = STANDARD.encode(format!("git:{}", t));
             req = req.set("Authorization", &format!("Basic {}", auth));
         }
 
-        // Pkt-line format: <old_hash> <new_hash> refs/heads/main\0report-status
+        // Pkt-line format: <old_hash> <new_hash> refs/heads/<branch>\0report-status
         let old_hash = remote_head.map(|h| h.to_string()).unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
         let new_hash = local_head.to_string();
-        let cmd = format!("{} {} refs/heads/main\0report-status", old_hash, new_hash);
+        let cmd = format!("{} {} refs/heads/{}\0report-status", old_hash, new_hash, branch);
         
         // pkt-line prefix is length in hex (cmd length + 4)
         let pkt_len = cmd.len() + 4;

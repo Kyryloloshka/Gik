@@ -91,7 +91,9 @@ pub fn push(storage: &Storage) -> Result<()> {
     let checksum = Sha1::digest(&temp_pack);
     temp_pack.extend_from_slice(&checksum);
     
-    client.push_packfile(&current_head, remote_head.as_ref(), &temp_pack)?;
+    let current_branch = storage.session().get_current_bookmark()?.unwrap_or_else(|| "main".to_string());
+    
+    client.push_packfile(&current_head, remote_head.as_ref(), &temp_pack, &current_branch)?;
     println!("Push successful!");
     
     Ok(())
