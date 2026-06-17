@@ -2,6 +2,7 @@ pub mod graph;
 pub mod hash;
 pub mod ignore;
 pub mod merge;
+pub mod clone_ops;
 pub mod models;
 pub mod objects;
 pub mod storage;

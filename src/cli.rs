@@ -12,6 +12,13 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize a new Gik repository
     Init,
+    /// Clone a repository into a new directory
+    Clone {
+        /// The URL of the remote repository
+        url: String,
+        /// The directory to clone into
+        directory: Option<String>,
+    },
     /// Stage a file for commit
     Stage {
         /// The path to the file to stage

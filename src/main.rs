@@ -36,6 +36,9 @@ fn run_cli() -> Result<()> {
         Commands::Init => {
             commands::init(crate::config::DB_PATH)?;
         }
+        Commands::Clone { url, directory } => {
+            commands::clone::clone(&url, directory)?;
+        }
         Commands::Update => {
             commands::update()?;
         }
@@ -90,7 +93,7 @@ fn run_cli() -> Result<()> {
                 Commands::CatFile { p, t, s, hash } => {
                     commands::cat_file(&storage, &hash, p, t, s)?;
                 }
-                Commands::Init | Commands::Update => unreachable!(),
+                Commands::Init | Commands::Update | Commands::Clone { .. } => unreachable!(),
             }
         }
     }
