@@ -13,7 +13,7 @@ pub fn clone(url: &str, directory: Option<String>) -> Result<()> {
     println!("Updating refs...");
     
     // The current directory has now been switched to target_dir by execute_clone
-    let db_path = ".gik";
+    let db_path = crate::config::DB_PATH;
     let storage = Storage::new(db_path)?;
     
     // Checkout working directory using the command

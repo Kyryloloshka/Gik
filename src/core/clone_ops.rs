@@ -34,7 +34,7 @@ pub fn execute_clone(url: &str, directory: Option<String>) -> Result<(String, St
     // Switch to the new directory
     std::env::set_current_dir(target_path)?;
     
-    let db_path = Path::new(".gik");
+    let db_path = Path::new(crate::config::DB_PATH);
     let storage = Storage::new(db_path.to_str().unwrap())?;
     
     storage.config().set_local("remote.origin.url", &clean_url)?;
