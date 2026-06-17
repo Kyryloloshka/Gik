@@ -131,14 +131,35 @@ impl GitClient {
         
         use std::io::BufRead;
         let mut reader = std::io::BufReader::new(resp.into_reader());
-        let mut response_bytes = Vec::new();
         
-        // Read ACK/NAK line
-        let _ = reader.read_until(b'\n', &mut response_bytes);
-        
-        let response_line = String::from_utf8_lossy(&response_bytes);
-        if response_line.contains("NAK") && have_hash.is_some() {
-            return Err(crate::error::GikError::Branch("Divergent branches: remote does not have local head".to_string()));
+        // Read lines until we hit "PACK"
+        loop {
+            let buffer = reader.fill_buf()?;
+            if buffer.len() < 4 {
+                break;
+            }
+            if &buffer[0..4] == b"PACK" {
+                break;
+            }
+            
+            // It's a pkt-line. Parse its length.
+            let len_str = std::str::from_utf8(&buffer[0..4]).unwrap_or("0000");
+            let pkt_len = usize::from_str_radix(len_str, 16).unwrap_or(0);
+            
+            if pkt_len == 0 {
+                reader.consume(4); // flush pkt
+                continue;
+            }
+            
+            // Read the full pkt-line
+            let mut pkt_buf = vec![0u8; pkt_len];
+            std::io::Read::read_exact(&mut reader, &mut pkt_buf)?;
+            
+            let line = String::from_utf8_lossy(&pkt_buf);
+            if line.contains("NAK") && have_hash.is_some() {
+                println!("Remote did not recognize our local HEAD. Falling back to full fetch.");
+            }
+            println!("Server sent: {}", line.trim_end());
         }
         
         Ok(Box::new(reader))

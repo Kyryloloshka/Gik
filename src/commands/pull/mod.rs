@@ -38,10 +38,15 @@ pub fn pull(storage: &Storage) -> Result<()> {
     println!("Decoding packfile...");
     decode_packfile(&mut reader, storage)?;
     
-    println!("Updating refs...");
-    storage.refs().set_ref(branch, &remote_head)?;
-    checkout(storage, branch, true)?;
+    if local_head.is_some() {
+        println!("Merging remote changes...");
+        crate::commands::merge::merge(storage, &remote_head.to_string())?;
+    } else {
+        println!("Updating refs...");
+        storage.refs().set_ref(branch, &remote_head)?;
+        checkout(storage, branch, true)?;
+    }
     
-    println!("Pull successful! Fast-forwarded to {}", remote_head);
+    println!("Pull successful!");
     Ok(())
 }

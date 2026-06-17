@@ -11,7 +11,7 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
     let mut header = [0u8; 12];
     reader.read_exact(&mut header)?;
     if &header[0..4] != b"PACK" {
-        return Err(GikError::Io(std::io::Error::other("Invalid packfile signature")));
+        return Err(GikError::Io(std::io::Error::other(format!("Invalid packfile signature: {:?}", String::from_utf8_lossy(&header)))));
     }
     
     let object_count = u32::from_be_bytes(header[8..12].try_into().unwrap());
