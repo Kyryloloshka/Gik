@@ -66,6 +66,17 @@ impl<'a> CommitService<'a> {
         Ok(())
     }
 
+    pub fn insert_commit_meta(&self, hash: &Hash, meta: crate::core::models::CommitMeta) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut metadata = write_txn.open_table(COMMITS_METADATA)?;
+            let meta_bytes = bincode::serialize(&meta)?;
+            metadata.insert(&hash.0, meta_bytes)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
     pub fn set_head(&self, new_head: &Hash) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
