@@ -19,14 +19,17 @@ impl GitClient {
         Self { url, token, agent }
     }
 
-    pub fn discover_refs(&self, branch: &str) -> Result<Option<Hash>> {
-        let req_url = format!("{}/info/refs?service=git-receive-pack", self.url);
-        let mut req = self.agent.get(&req_url);
-        
+    fn apply_auth(&self, mut req: ureq::Request) -> ureq::Request {
         if let Some(t) = &self.token {
             let auth = STANDARD.encode(format!("git:{}", t));
             req = req.set("Authorization", &format!("Basic {}", auth));
         }
+        req
+    }
+
+    pub fn discover_refs(&self, branch: &str) -> Result<Option<Hash>> {
+        let req_url = format!("{}/info/refs?service=git-receive-pack", self.url);
+        let req = self.apply_auth(self.agent.get(&req_url));
 
         let resp = req.call().map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
         
@@ -39,16 +42,12 @@ impl GitClient {
         Ok(parse_discover_refs_body(&body, branch))
     }
 
-    pub fn push_packfile<R: std::io::Read>(&self, local_head: &Hash, remote_head: Option<&Hash>, mut packfile: R, branch: &str) -> Result<()> {
+    pub fn push_packfile<R: std::io::Read>(&self, local_head: &Hash, remote_head: Option<&Hash>, packfile: R, branch: &str) -> Result<()> {
         let req_url = format!("{}/git-receive-pack", self.url);
-        let mut req = self.agent.post(&req_url)
+        let req = self.agent.post(&req_url)
             .set("Content-Type", "application/x-git-receive-pack-request");
             
-        if let Some(t) = &self.token {
-            use base64::{Engine as _, engine::general_purpose::STANDARD};
-            let auth = STANDARD.encode(format!("git:{}", t));
-            req = req.set("Authorization", &format!("Basic {}", auth));
-        }
+        let req = self.apply_auth(req);
 
         // Pkt-line format: <old_hash> <new_hash> refs/heads/<branch>\0report-status
         let old_hash = remote_head.map(|h| h.to_string()).unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
@@ -84,13 +83,7 @@ impl GitClient {
 
     pub fn discover_fetch_refs(&self, branch: &str) -> Result<Option<Hash>> {
         let req_url = format!("{}/info/refs?service=git-upload-pack", self.url);
-        let mut req = self.agent.get(&req_url);
-        
-        if let Some(t) = &self.token {
-            use base64::{Engine as _, engine::general_purpose::STANDARD};
-            let auth = STANDARD.encode(format!("git:{}", t));
-            req = req.set("Authorization", &format!("Basic {}", auth));
-        }
+        let req = self.apply_auth(self.agent.get(&req_url));
 
         let resp = req.call().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
         if resp.status() != 200 {
@@ -103,18 +96,16 @@ impl GitClient {
 
     pub fn fetch_packfile(&self, want_hash: &Hash, have_hash: Option<&Hash>) -> Result<Box<dyn std::io::Read>> {
         let req_url = format!("{}/git-upload-pack", self.url);
-        let mut req = self.agent.post(&req_url)
+        let req = self.agent.post(&req_url)
             .set("Content-Type", "application/x-git-upload-pack-request");
             
-        if let Some(t) = &self.token {
-            use base64::{Engine as _, engine::general_purpose::STANDARD};
-            let auth = STANDARD.encode(format!("git:{}", t));
-            req = req.set("Authorization", &format!("Basic {}", auth));
-        }
+        let req = self.apply_auth(req);
 
         let want_cmd = format!("want {} multi_ack\n", want_hash);
         let pkt_len = want_cmd.len() + 4;
         let mut body_str = format!("{:04x}{}", pkt_len, want_cmd);
+        
+        body_str.push_str("0000"); // Flush packet separates want and have
         
         if let Some(h) = have_hash {
             let have_cmd = format!("have {}\n", h);
@@ -122,7 +113,7 @@ impl GitClient {
             body_str.push_str(&format!("{:04x}{}", h_len, have_cmd));
         }
         
-        body_str.push_str("00000009done\n");
+        body_str.push_str("0009done\n");
         
         let resp = req.send_string(&body_str).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
         
@@ -130,17 +121,12 @@ impl GitClient {
             return Err(crate::error::GikError::Io(std::io::Error::other(format!("HTTP Error: {}", resp.status()))));
         }
         
-        let mut reader = resp.into_reader();
+        use std::io::BufRead;
+        let mut reader = std::io::BufReader::new(resp.into_reader());
         let mut response_bytes = Vec::new();
-        let mut buf = [0u8; 1];
         
         // Read ACK/NAK line
-        while std::io::Read::read_exact(&mut reader, &mut buf).is_ok() {
-            response_bytes.push(buf[0]);
-            if buf[0] == b'\n' {
-                break;
-            }
-        }
+        let _ = reader.read_until(b'\n', &mut response_bytes);
         
         let response_line = String::from_utf8_lossy(&response_bytes);
         if response_line.contains("NAK") && have_hash.is_some() {

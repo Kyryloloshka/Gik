@@ -15,6 +15,16 @@ impl<'a> ObjectService<'a> {
         Ok(exists)
     }
 
+    pub fn write_object(&self, hash: &Hash, compressed_data: &[u8]) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(OBJECTS)?;
+            table.insert(&hash.0, compressed_data.to_vec())?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
     pub fn list_all_objects(&self) -> Result<Vec<Hash>> {
         let read_txn = self.repo.db.begin_read()?;
         let table = read_txn.open_table(OBJECTS)?;
