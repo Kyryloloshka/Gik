@@ -68,6 +68,16 @@ impl<'a> IndexService<'a> {
         Ok(hash)
     }
 
+    pub fn set_staged_hash(&self, path: &str, hash: &Hash) -> Result<()> {
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
+            index.insert(path, &hash.0)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
     pub fn get_all_staged_files(&self) -> Result<Vec<(String, Hash)>> {
         let read_txn = self.repo.db.begin_read()?;
         let table = read_txn.open_table(STAGE_INDEX)?;

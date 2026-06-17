@@ -13,6 +13,9 @@ pub mod branch;
 pub mod config;
 pub mod push;
 pub mod pull;
+pub mod cat_file;
+pub mod clone;
+pub mod show;
 
 pub use commit::commit;
 pub use diff::diff;
@@ -28,9 +31,10 @@ pub use branch::branch;
 pub use config::config;
 pub use push::push;
 pub use pull::pull;
-pub mod cat_file;
-pub mod clone;
 pub use cat_file::cat_file;
+pub use show::show;
+pub mod unstage;
+pub use unstage::unstage;
 
 #[cfg(test)]
 pub mod test_utils;

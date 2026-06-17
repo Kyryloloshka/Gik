@@ -62,8 +62,17 @@ pub enum Commands {
         #[arg(long)]
         import_git: bool,
     },
+    /// Unstage a file (remove it from the index)
+    Unstage {
+        /// The path to unstage (or . for all)
+        path: String,
+    },
     /// Show the working tree status
-    Status,
+    Status {
+        /// Give the output in an easy-to-parse format for scripts
+        #[arg(long)]
+        porcelain: bool,
+    },
     /// Show changes between commits, commit and working tree, etc
     Diff {
         /// Show changes in the stage
@@ -110,6 +119,11 @@ pub enum Commands {
         s: bool,
         /// The object hash
         hash: String,
+    },
+    /// Show object content
+    Show {
+        /// Target in format <ref>:<path>
+        target: String,
     },
 }
 

@@ -4,8 +4,42 @@ use crate::core::models::FileState;
 use colored::*;
 
 /// Show the working tree status
-pub fn status(storage: &Storage) -> Result<()> {
+pub fn status(storage: &Storage, porcelain: bool) -> Result<()> {
     let repo_status = crate::core::workspace::get_status(storage)?;
+    
+    if porcelain {
+        let mut all_files: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for k in repo_status.staged.keys() { all_files.insert(k.clone()); }
+        for k in repo_status.unstaged.keys() { all_files.insert(k.clone()); }
+        for k in &repo_status.untracked { all_files.insert(k.clone()); }
+
+        for file in all_files {
+            let mut staged_char = ' ';
+            if let Some(s) = repo_status.staged.get(&file) {
+                staged_char = match s {
+                    FileState::Modified => 'M',
+                    FileState::New => 'A',
+                    FileState::Deleted => 'D',
+                };
+            }
+            
+            let mut unstaged_char = ' ';
+            if let Some(s) = repo_status.unstaged.get(&file) {
+                unstaged_char = match s {
+                    FileState::Modified => 'M',
+                    FileState::New => '?',
+                    FileState::Deleted => 'D',
+                };
+            } else if repo_status.untracked.contains(&file) {
+                staged_char = '?';
+                unstaged_char = '?';
+            }
+            
+            println!("{}{}\t{}", staged_char, unstaged_char, file);
+        }
+        return Ok(());
+    }
+    
     let current_bookmark = storage.session().get_current_bookmark()?;
 
     // Presentation
@@ -22,7 +56,7 @@ pub fn status(storage: &Storage) -> Result<()> {
 
     if !repo_status.staged.is_empty() {
         println!("\nChanges to be committed:");
-        println!("  (use \"gik undo\" to unstage)");
+        println!("  (use \"gik unstage <file>...\" to unstage)");
         
         let mut staged_v: Vec<_> = repo_status.staged.iter().collect();
         staged_v.sort_by(|a, b| a.0.cmp(b.0));

@@ -35,14 +35,14 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
                 };
 
                 let file = File::open(&path)?;
-                storage.index().stage_file(&path, &hash, metadata.len(), file)?;
+                storage.index().stage_file(&normalized_path, &hash, metadata.len(), file)?;
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Path not found on disk. Check if it's in the index to stage deletion.
-            if storage.index().get_staged_hash(&path)?.is_some() {
-                println!("Staging deletion: {}", path);
-                storage.index().unstage_file(&path)?;
+            if storage.index().get_staged_hash(&normalized_path)?.is_some() {
+                println!("Staging deletion: {}", normalized_path);
+                storage.index().unstage_file(&normalized_path)?;
             } else {
                 return Err(crate::error::GikError::NotFound(format!("pathspec '{}' did not match any files", path)));
             }

@@ -66,8 +66,11 @@ fn run_cli() -> Result<()> {
                 Commands::Undo => {
                     commands::undo(&storage)?;
                 }
-                Commands::Status => {
-                    commands::status(&storage)?;
+                Commands::Unstage { path } => {
+                    commands::unstage(&storage, path)?;
+                }
+                Commands::Status { porcelain } => {
+                    commands::status(&storage, porcelain)?;
                 }
                 Commands::Diff { staged } => {
                     commands::diff(&storage, staged)?;
@@ -92,6 +95,9 @@ fn run_cli() -> Result<()> {
                 }
                 Commands::CatFile { p, t, s, hash } => {
                     commands::cat_file(&storage, &hash, p, t, s)?;
+                }
+                Commands::Show { target } => {
+                    commands::show(&storage, &target)?;
                 }
                 Commands::Init | Commands::Update | Commands::Clone { .. } => unreachable!(),
             }
