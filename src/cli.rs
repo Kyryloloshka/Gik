@@ -91,6 +91,8 @@ pub enum Commands {
     },
     /// Push commits to remote repository
     Push,
+    /// Fetch and fast-forward from remote repository
+    Pull,
 }
 
 

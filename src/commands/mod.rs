@@ -12,6 +12,7 @@ pub mod checkout;
 pub mod branch;
 pub mod config;
 pub mod push;
+pub mod pull;
 
 pub use commit::commit;
 pub use diff::diff;
@@ -25,6 +26,8 @@ pub use update::update;
 pub use checkout::checkout;
 pub use branch::branch;
 pub use config::config;
+pub use push::push;
+pub use pull::pull;
 
 #[cfg(test)]
 pub mod test_utils;

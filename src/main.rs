@@ -70,6 +70,9 @@ fn run_cli() -> Result<()> {
                 Commands::Push => {
                     commands::push::push(&storage)?;
                 }
+                Commands::Pull => {
+                    commands::pull::pull(&storage)?;
+                }
                 Commands::Init | Commands::Update => unreachable!(),
             }
         }
