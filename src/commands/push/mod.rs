@@ -32,9 +32,6 @@ pub fn push(storage: &Storage) -> Result<()> {
     
     println!("Pushing objects...");
     use crate::core::pack::discovery::discover_missing_objects;
-    use crate::core::pack::encoder::{write_packfile_header, write_object_header};
-    use crate::core::objects::decompress_object;
-    use sha1::{Sha1, Digest};
 
     let missing = discover_missing_objects(storage, remote_head.as_ref(), &current_head)?;
     if missing.is_empty() {
@@ -44,72 +41,7 @@ pub fn push(storage: &Storage) -> Result<()> {
     
     println!("Compressing {} objects into Packfile...", missing.len());
     
-    let mut dummy_hasher = Sha1::new();
-    let mut temp_pack = tempfile::tempfile().map_err(|e| crate::error::GikError::Io(e))?;
-    let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
-    
-    for hash in missing {
-        let (obj_type, size, content) = if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
-            let (author_name, author_email) = if let Some(open) = meta.author.find('<') {
-                if let Some(close) = meta.author.find('>') {
-                    (meta.author[..open].trim(), &meta.author[open+1..close])
-                } else {
-                    (meta.author.as_str(), "")
-                }
-            } else {
-                (meta.author.as_str(), "")
-            };
-            
-            let payload = crate::core::objects::commit::build_commit_content(
-                meta.tree_hash,
-                &meta.parent_hashes,
-                author_name,
-                author_email,
-                meta.timestamp,
-                &meta.message,
-            ).into_bytes();
-            (1u8, payload.len(), payload)
-        } else if let Some(compressed) = storage.objects().get_object(&hash)? {
-            let (type_str, size, payload) = decompress_object(&compressed[..])?;
-            let type_id = match type_str.as_str() {
-                "tree" => 2u8,
-                "blob" => 3u8,
-                _ => return Err(crate::error::GikError::Validation("Unknown object type in storage".to_string())),
-            };
-            (type_id, size as usize, payload)
-        } else {
-            return Err(crate::error::GikError::NotFound(format!("Missing object {}", hash)));
-        };
-        
-        write_object_header(&mut temp_pack, obj_type, size, &mut dummy_hasher)?;
-        
-        use std::io::Write;
-        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(e))?;
-        let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
-        temp_pack.write_all(&zlibbed).map_err(|e| crate::error::GikError::Io(e))?;
-    }
-    
-    // We must manually compute checksum for the whole file. 
-    // This is not perfectly streaming because we read it back once, but it solves the memory issue.
-    use std::io::{Read, Seek, SeekFrom};
-    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(e))?;
-    let mut real_hasher = Sha1::new();
-    let mut buffer = [0u8; 8192];
-    loop {
-        let n = temp_pack.read(&mut buffer).map_err(|e| crate::error::GikError::Io(e))?;
-        if n == 0 { break; }
-        real_hasher.update(&buffer[..n]);
-    }
-    let checksum = real_hasher.finalize();
-    temp_pack.seek(SeekFrom::End(0)).map_err(|e| crate::error::GikError::Io(e))?;
-    use std::io::Write;
-    temp_pack.write_all(&checksum).map_err(|e| crate::error::GikError::Io(e))?;
-    
-    // Reset cursor to start for sending
-    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(e))?;
-    
-    let current_branch = storage.session().get_current_bookmark()?.unwrap_or_else(|| "main".to_string());
+    let temp_pack = crate::core::pack::encoder::build_packfile(storage, missing)?;
     
     client.push_packfile(&current_head, remote_head.as_ref(), temp_pack, &current_branch)?;
     println!("Push successful!");

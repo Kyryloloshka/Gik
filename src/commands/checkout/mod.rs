@@ -1,6 +1,5 @@
 use crate::core::storage::Storage;
-use crate::error::{Result, GikError};
-use crate::core::hash::Hash;
+use crate::error::Result;
 use crate::core::objects::get_commit_tree_files;
 use crate::core::workspace::{get_status, restore_workspace};
 
@@ -18,28 +17,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
         }
     }
 
-    // 2. Parse Hash: Support bookmark names and prefix matching
-    let mut resolved_bookmark = None;
-    let full_hash = if let Some(h) = storage.refs().get_ref(hash)? {
-        resolved_bookmark = Some(hash.to_string());
-        h
-    } else if hash.len() == 40 {
-        Hash::from_hex(hash).map_err(|e| GikError::Validation(format!("Invalid hash format: {}", e)))?
-    } else {
-        let all_objects = storage.objects().list_all_objects()?;
-        let matches: Vec<Hash> = all_objects
-            .into_iter()
-            .filter(|h| h.to_string().starts_with(hash))
-            .collect();
-
-        if matches.is_empty() {
-            return Err(GikError::NotFound(format!("Commit not found: {}", hash)));
-        }
-        if matches.len() > 1 {
-            return Err(GikError::AmbiguousHash(hash.to_string()));
-        }
-        matches[0]
-    };
+    let (full_hash, resolved_bookmark) = crate::core::utils::resolve_hash(storage, hash)?;
 
     // 3. Ensure the found hash is a commit
     let meta = storage.commits().get_commit_meta(&full_hash)?

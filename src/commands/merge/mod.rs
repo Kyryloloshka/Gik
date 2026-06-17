@@ -1,5 +1,5 @@
 use crate::core::storage::Storage;
-use crate::error::{Result, GikError};
+use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::workspace::get_status;
 use crate::core::graph::find_lowest_common_ancestor;
@@ -19,25 +19,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         return Err(crate::error::GikError::DirtyWorkspace("Working directory is not clean. Please commit or restore changes before merging.".to_string()));
     }
 
-    let full_hash = if let Some(h) = storage.refs().get_ref(target)? {
-        h
-    } else if target.len() == 40 {
-        Hash::from_hex(target).map_err(|e| GikError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
-    } else {
-        let all_objects = storage.objects().list_all_objects()?;
-        let matches: Vec<Hash> = all_objects
-            .into_iter()
-            .filter(|h| h.to_string().starts_with(target))
-            .collect();
-
-        if matches.is_empty() {
-            return Err(crate::error::GikError::NotFound(format!("Commit not found: {}", target)));
-        }
-        if matches.len() > 1 {
-            return Err(crate::error::GikError::AmbiguousHash(target.to_string()));
-        }
-        matches[0]
-    };
+    let (full_hash, _) = crate::core::utils::resolve_hash(storage, target)?;
 
     if full_hash == current_head {
         println!("Already up to date.");

@@ -9,6 +9,7 @@ pub mod utils;
 pub mod workspace;
 pub mod pack;
 pub mod network;
+pub mod commit_ops;
 
 pub use graph::*;
 pub use hash::*;
@@ -19,4 +20,5 @@ pub use objects::*;
 pub use storage::*;
 pub use utils::*;
 pub use workspace::*;
+pub use commit_ops::*;
 

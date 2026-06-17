@@ -29,6 +29,30 @@ pub fn resolve_path(cwd: &Path, root_dir: &Path, user_path: &str) -> String {
     }
 }
 
+pub fn resolve_hash(storage: &crate::core::storage::Storage, target: &str) -> crate::error::Result<(crate::core::hash::Hash, Option<String>)> {
+    if let Some(h) = storage.refs().get_ref(target)? {
+        Ok((h, Some(target.to_string())))
+    } else if target.len() == 40 {
+        let h = crate::core::hash::Hash::from_hex(target)
+            .map_err(|e| crate::error::GikError::Validation(format!("Invalid hash format: {}", e)))?;
+        Ok((h, None))
+    } else {
+        let all_objects = storage.objects().list_all_objects()?;
+        let matches: Vec<crate::core::hash::Hash> = all_objects
+            .into_iter()
+            .filter(|h| h.to_string().starts_with(target))
+            .collect();
+
+        if matches.is_empty() {
+            return Err(crate::error::GikError::NotFound(format!("Object not found: {}", target)));
+        }
+        if matches.len() > 1 {
+            return Err(crate::error::GikError::AmbiguousHash(target.to_string()));
+        }
+        Ok((matches[0], None))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
