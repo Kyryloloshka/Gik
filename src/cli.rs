@@ -41,6 +41,9 @@ pub enum Commands {
         /// Show all commits, not just ancestors of HEAD
         #[arg(short, long)]
         all: bool,
+        /// Output the log as a JSON array
+        #[arg(long)]
+        json: bool,
     },
     /// Restore working tree files
     Restore {

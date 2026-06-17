@@ -6,7 +6,7 @@ use std::collections::{HashSet, HashMap};
 use colored::*;
 use renderdag::{GraphRenderer, Node, RenderConfig};
 
-pub fn log(storage: &Storage, all: bool) -> Result<()> {
+pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
     
@@ -66,6 +66,24 @@ pub fn log(storage: &Storage, all: bool) -> Result<()> {
         dfs(head_hash, storage, &mut visited, &mut sorted_commits);
     }
     sorted_commits.reverse(); // Now children come before parents
+
+    if json {
+        let mut json_commits = Vec::new();
+        for (hash, meta) in &sorted_commits {
+            let refs = labels.get(hash).cloned().unwrap_or_default();
+            let commit_obj = serde_json::json!({
+                "hash": hash.to_string(),
+                "parents": meta.parent_hashes.iter().map(|h| h.to_string()).collect::<Vec<_>>(),
+                "author": meta.author,
+                "timestamp": meta.timestamp,
+                "message": meta.message,
+                "refs": refs
+            });
+            json_commits.push(commit_obj);
+        }
+        println!("{}", serde_json::to_string_pretty(&json_commits).unwrap());
+        return Ok(());
+    }
 
     let mut dag_nodes = Vec::new();
     for (hash, meta) in &sorted_commits {

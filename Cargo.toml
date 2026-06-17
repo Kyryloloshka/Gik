@@ -29,6 +29,7 @@ base64 = "0.22.1"
 tempfile = "3.8"
 ignore = "0.4.26"
 renderdag = "0.3.1"
+serde_json = "1.0.150"
 
 [dev-dependencies]
 tempfile = "3.8"
