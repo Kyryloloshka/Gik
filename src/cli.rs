@@ -93,6 +93,20 @@ pub enum Commands {
     Push,
     /// Fetch and fast-forward from remote repository
     Pull,
+    /// Provide content or type and size information for repository objects
+    CatFile {
+        /// Pretty-print the contents of the object
+        #[arg(short, long)]
+        p: bool,
+        /// Show object type
+        #[arg(short, long)]
+        t: bool,
+        /// Show object size
+        #[arg(short, long)]
+        s: bool,
+        /// The object hash
+        hash: String,
+    },
 }
 
 

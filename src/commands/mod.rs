@@ -28,6 +28,8 @@ pub use branch::branch;
 pub use config::config;
 pub use push::push;
 pub use pull::pull;
+pub mod cat_file;
+pub use cat_file::cat_file;
 
 #[cfg(test)]
 pub mod test_utils;

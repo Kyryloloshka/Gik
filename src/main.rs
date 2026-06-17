@@ -73,6 +73,9 @@ fn run_cli() -> Result<()> {
                 Commands::Pull => {
                     commands::pull::pull(&storage)?;
                 }
+                Commands::CatFile { p, t, s, hash } => {
+                    commands::cat_file(&storage, &hash, p, t, s)?;
+                }
                 Commands::Init | Commands::Update => unreachable!(),
             }
         }
