@@ -6,7 +6,7 @@ use std::collections::{HashSet, HashMap};
 use colored::*;
 use renderdag::{GraphRenderer, Node, RenderConfig};
 
-pub fn log(storage: &Storage, all: bool, graph: bool) -> Result<()> {
+pub fn log(storage: &Storage, all: bool) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
     
@@ -67,27 +67,21 @@ pub fn log(storage: &Storage, all: bool, graph: bool) -> Result<()> {
     }
     sorted_commits.reverse(); // Now children come before parents
 
-    if graph {
-        let mut dag_nodes = Vec::new();
-        for (hash, meta) in &sorted_commits {
-            dag_nodes.push(Node::new(
-                hash.to_string(),
-                meta.parent_hashes.iter().map(|h| h.to_string()).collect()
-            ));
-        }
+    let mut dag_nodes = Vec::new();
+    for (hash, meta) in &sorted_commits {
+        dag_nodes.push(Node::new(
+            hash.to_string(),
+            meta.parent_hashes.iter().map(|h| h.to_string()).collect()
+        ));
+    }
 
-        let mut renderer = GraphRenderer::new(RenderConfig::default());
-        let actual_glyphs = renderer.render_to_string(&dag_nodes);
-        let mut rendered_lines = actual_glyphs.lines();
+    let mut renderer = GraphRenderer::new(RenderConfig::default());
+    let actual_glyphs = renderer.render_to_string(&dag_nodes);
+    let mut rendered_lines = actual_glyphs.lines();
 
-        for (hash, meta) in sorted_commits {
-            let graph_line = rendered_lines.next().unwrap_or("");
-            print_commit_graph(hash, meta, &labels, graph_line);
-        }
-    } else {
-        for (hash, meta) in sorted_commits {
-            print_commit_linear(hash, meta, &labels);
-        }
+    for (hash, meta) in sorted_commits {
+        let graph_line = rendered_lines.next().unwrap_or("");
+        print_commit_graph(hash, meta, &labels, graph_line);
     }
 
     Ok(())
@@ -131,27 +125,3 @@ fn print_commit_graph(
     }
 }
 
-fn print_commit_linear(
-    hash: Hash, 
-    meta: CommitMeta, 
-    labels: &HashMap<Hash, Vec<String>>
-) {
-    let mut header = format!("commit {}", hash).yellow().to_string();
-    if let Some(names) = labels.get(&hash) {
-        header.push_str(&format!(" ({})", names.join(", ")).cyan().bold().to_string());
-    }
-
-    println!("{}", header);
-    println!("Author: {}", meta.author);
-    
-    let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
-        .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
-        .unwrap_or_else(|| "Unknown date".to_string());
-    println!("Date:   {}", datetime);
-    println!();
-    
-    for msg_line in meta.message.lines() {
-        println!("    {}", msg_line);
-    }
-    println!();
-}

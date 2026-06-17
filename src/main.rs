@@ -53,8 +53,8 @@ fn run_cli() -> Result<()> {
                 Commands::Commit { message, staged, branch } => {
                     commands::commit(&storage, message, staged, branch)?;
                 }
-                Commands::Log { all, graph } => {
-                    commands::log(&storage, all, graph)?;
+                Commands::Log { all } => {
+                    commands::log(&storage, all)?;
                 }
                 Commands::Restore { path } => {
                     let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);

@@ -34,9 +34,6 @@ pub enum Commands {
         /// Show all commits, not just ancestors of HEAD
         #[arg(short, long)]
         all: bool,
-        /// Show the commit graph
-        #[arg(short, long)]
-        graph: bool,
     },
     /// Restore working tree files
     Restore {
