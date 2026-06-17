@@ -10,8 +10,22 @@ use error::Result;
 
 fn main() {
     if let Err(e) = run_cli() {
-        eprintln!("{}", e);
+        print_error_and_help(&e);
         std::process::exit(1);
+    }
+}
+
+fn print_error_and_help(e: &error::GikError) {
+    eprintln!("❌ Error: {}", e);
+    match e {
+        error::GikError::Config(_) => eprintln!("💡 Help: Use 'gik config <key> <value>' to configure your repository."),
+        error::GikError::Auth(_) => eprintln!("💡 Help: Check if your GITHUB_TOKEN is valid and has the necessary permissions."),
+        error::GikError::DirtyWorkspace(_) => eprintln!("💡 Help: Run 'gik status' to see your changes. Use 'gik commit' to save them or 'gik restore' to discard."),
+        error::GikError::Branch(_) => eprintln!("💡 Help: Use 'gik branch' to see available branches."),
+        error::GikError::NotFound(_) => eprintln!("💡 Help: Ensure the object, commit, or path you specified exists."),
+        error::GikError::Merge(_) => eprintln!("💡 Help: Ensure you are merging a valid commit and the working directory is clean."),
+        error::GikError::AmbiguousHash(_) => eprintln!("💡 Help: Please provide more characters of the hash to uniquely identify it."),
+        _ => {}
     }
 }
 

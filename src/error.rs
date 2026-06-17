@@ -18,6 +18,26 @@ pub enum GikError {
     Commit(#[from] redb::CommitError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] bincode::Error),
+    #[error("Authentication failed: {0}")]
+    Auth(String),
+    #[error("Network error: {0}")]
+    Network(String),
+    #[error("Configuration missing or invalid: {0}")]
+    Config(String),
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Workspace is dirty: {0}")]
+    DirtyWorkspace(String),
+    #[error("Invalid or divergent branch: {0}")]
+    Branch(String),
+    #[error("Merge error: {0}")]
+    Merge(String),
+    #[error("Validation error: {0}")]
+    Validation(String),
+    #[error("Ambiguous hash: {0}")]
+    AmbiguousHash(String),
+    #[error("Operation aborted: {0}")]
+    Aborted(String),
     #[error("Invalid hash length")]
     InvalidHash,
 }

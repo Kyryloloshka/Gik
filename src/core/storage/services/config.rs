@@ -27,7 +27,7 @@ impl<'a> ConfigService<'a> {
 
     pub fn get_global(&self, key: &str) -> Result<Option<String>> {
         let config_path = dirs::home_dir()
-            .ok_or_else(|| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")))?
+            .ok_or_else(|| crate::error::GikError::Config("Home directory not found".to_string()))?
             .join(".gikconfig");
         
         if !config_path.exists() {
@@ -47,7 +47,7 @@ impl<'a> ConfigService<'a> {
 
     pub fn set_global(&self, key: &str, value: &str) -> Result<()> {
         let config_path = dirs::home_dir()
-            .ok_or_else(|| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")))?
+            .ok_or_else(|| crate::error::GikError::Config("Home directory not found".to_string()))?
             .join(".gikconfig");
         
         let mut config_map = HashMap::new();

@@ -24,7 +24,7 @@ impl<'a> UndoService<'a> {
                 if let Some(b) = bytes {
                     bincode::deserialize(&b.value())?
                 } else {
-                    return Err(crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "Transaction log entry missing")));
+                    return Err(crate::error::GikError::NotFound("Transaction log entry missing".to_string()));
                 }
             };
             {

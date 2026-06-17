@@ -20,7 +20,7 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
         let head_hash = storage.commits().get_current_head()?;
         let head_files = if let Some(h) = head_hash {
             let meta = storage.commits().get_commit_meta(&h)?
-                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Head commit meta not found"))?;
+                .ok_or_else(|| crate::error::GikError::NotFound("Head commit meta not found".to_string()))?;
             crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?
         } else {
             std::collections::HashMap::new()

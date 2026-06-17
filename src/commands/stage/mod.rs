@@ -44,10 +44,7 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
                 println!("Staging deletion: {}", path);
                 storage.index().unstage_file(&path)?;
             } else {
-                return Err(crate::error::GikError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("pathspec '{}' did not match any files", path)
-                )));
+                return Err(crate::error::GikError::NotFound(format!("pathspec '{}' did not match any files", path)));
             }
         }
         Err(e) => return Err(e.into()),
@@ -66,7 +63,7 @@ fn stage_directory(storage: &Storage, dir_path: &str, matcher: &crate::core::ign
             let path = entry.path();
             
             let relative_path = path.strip_prefix(&root)
-                .map_err(std::io::Error::other)?;
+                .map_err(|e| crate::error::GikError::Validation(format!("Path error: {}", e)))?;
             let path_str = relative_path.to_str().unwrap_or("");
             if path_str.is_empty() { continue; }
             let normalized = path_str.replace('\\', "/");

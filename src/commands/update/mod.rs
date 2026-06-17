@@ -13,9 +13,9 @@ pub fn update() -> Result<()> {
         .show_download_progress(true)
         .current_version(cargo_crate_version!())
         .build()
-        .map_err(|e| std::io::Error::other(e.to_string()))?
+        .map_err(|e| crate::error::GikError::Network(format!("Failed to parse response: {}", e)))?
         .update()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+        .map_err(|e| crate::error::GikError::Network(format!("Failed to parse JSON: {}", e)))?;
 
 
     if status.updated() {

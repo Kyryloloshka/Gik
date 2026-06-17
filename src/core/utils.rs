@@ -7,10 +7,7 @@ pub fn find_repo_root(current_dir: &Path) -> Result<PathBuf> {
             return Ok(ancestor.to_path_buf());
         }
     }
-    Err(crate::error::GikError::Io(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "Not a gik repository (or any of the parent directories)",
-    )))
+    Err(crate::error::GikError::NotFound("Not a gik repository (or any of the parent directories): .gik".to_string()))
 }
 
 pub fn resolve_path(cwd: &Path, root_dir: &Path, user_path: &str) -> String {

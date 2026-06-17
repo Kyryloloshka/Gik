@@ -31,13 +31,15 @@ impl GitClient {
         let req_url = format!("{}/info/refs?service=git-receive-pack", self.url);
         let req = self.apply_auth(self.agent.get(&req_url));
 
-        let resp = req.call().map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
+        let resp = req.call().map_err(|e| GikError::Network(e.to_string()))?;
         
-        if resp.status() != 200 {
-            return Err(GikError::Io(std::io::Error::other(format!("HTTP Error: {}", resp.status()))));
+        if resp.status() == 401 {
+            return Err(GikError::Auth("Invalid token or authentication required".to_string()));
+        } else if resp.status() != 200 {
+            return Err(GikError::Network(format!("HTTP Error: {}", resp.status())));
         }
 
-        let body = resp.into_string().map_err(|e| GikError::Io(std::io::Error::other(e)))?;
+        let body = resp.into_string().map_err(|e| GikError::Network(e.to_string()))?;
         
         Ok(parse_discover_refs_body(&body, branch))
     }
@@ -68,14 +70,16 @@ impl GitClient {
         use std::io::Read;
         let reader = std::io::Cursor::new(prefix).chain(packfile);
 
-        let resp = req.send(reader).map_err(|e| GikError::Io(std::io::Error::other(e.to_string())))?;
+        let resp = req.send(reader).map_err(|e| GikError::Network(e.to_string()))?;
         
-        if resp.status() != 200 {
-            return Err(GikError::Io(std::io::Error::other(format!("HTTP Error during push: {}", resp.status()))));
+        if resp.status() == 401 {
+            return Err(GikError::Auth("Invalid token or authentication required during push".to_string()));
+        } else if resp.status() != 200 {
+            return Err(GikError::Network(format!("HTTP Error during push: {}", resp.status())));
         }
         
         // Print remote response (e.g., unpack ok)
-        let body = resp.into_string().map_err(|e| GikError::Io(std::io::Error::other(e)))?;
+        let body = resp.into_string().map_err(|e| GikError::Network(e.to_string()))?;
         println!("Server responded:\n{}", body);
         
         Ok(())
@@ -85,12 +89,14 @@ impl GitClient {
         let req_url = format!("{}/info/refs?service=git-upload-pack", self.url);
         let req = self.apply_auth(self.agent.get(&req_url));
 
-        let resp = req.call().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-        if resp.status() != 200 {
-            return Err(crate::error::GikError::Io(std::io::Error::other(format!("HTTP Error: {}", resp.status()))));
+        let resp = req.call().map_err(|e| crate::error::GikError::Network(e.to_string()))?;
+        if resp.status() == 401 {
+            return Err(crate::error::GikError::Auth("Invalid token or authentication required".to_string()));
+        } else if resp.status() != 200 {
+            return Err(crate::error::GikError::Network(format!("HTTP Error: {}", resp.status())));
         }
 
-        let body = resp.into_string().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e)))?;
+        let body = resp.into_string().map_err(|e| crate::error::GikError::Network(e.to_string()))?;
         Ok(parse_discover_refs_body(&body, branch))
     }
 
@@ -115,10 +121,12 @@ impl GitClient {
         
         body_str.push_str("0009done\n");
         
-        let resp = req.send_string(&body_str).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        let resp = req.send_string(&body_str).map_err(|e| crate::error::GikError::Network(e.to_string()))?;
         
-        if resp.status() != 200 {
-            return Err(crate::error::GikError::Io(std::io::Error::other(format!("HTTP Error: {}", resp.status()))));
+        if resp.status() == 401 {
+            return Err(crate::error::GikError::Auth("Invalid token or authentication required".to_string()));
+        } else if resp.status() != 200 {
+            return Err(crate::error::GikError::Network(format!("HTTP Error: {}", resp.status())));
         }
         
         use std::io::BufRead;
@@ -130,7 +138,7 @@ impl GitClient {
         
         let response_line = String::from_utf8_lossy(&response_bytes);
         if response_line.contains("NAK") && have_hash.is_some() {
-            return Err(crate::error::GikError::Io(std::io::Error::other("Divergent branches: remote does not have local head")));
+            return Err(crate::error::GikError::Branch("Divergent branches: remote does not have local head".to_string()));
         }
         
         Ok(Box::new(reader))

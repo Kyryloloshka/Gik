@@ -42,7 +42,7 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
         let meta = storage
             .commits()
             .get_commit_meta(&h)?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Head commit meta not found"))?;
+            .ok_or_else(|| crate::error::GikError::NotFound("Head commit meta not found".to_string()))?;
         get_commit_tree_files(storage, &meta.tree_hash)?
     } else {
         HashMap::new()
@@ -106,7 +106,7 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
 pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> {
     // 1. Get commit meta
     let meta = storage.commits().get_commit_meta(target_commit)?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Commit {} not found", target_commit)))?;
+        .ok_or_else(|| crate::error::GikError::NotFound(format!("Commit {} not found", target_commit)))?;
 
     // 2. Get flat file map from target tree
     let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
@@ -123,7 +123,7 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     // 4. Restore target files
     for (path, hash) in tree_files {
         let compressed_data = storage.objects().get_object(&hash)?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Blob {} not found", hash)))?;
+            .ok_or_else(|| crate::error::GikError::NotFound(format!("Blob {} not found", hash)))?;
         
         let (_obj_type, _size, content) = crate::core::objects::decompress_object(&compressed_data[..])?;
         

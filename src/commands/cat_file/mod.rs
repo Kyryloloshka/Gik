@@ -8,7 +8,7 @@ pub fn cat_file(storage: &Storage, hash_str: &str, p: bool, t: bool, s: bool) ->
         .map_err(|e| GikError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
 
     let compressed_data = storage.objects().get_object(&hash)?
-        .ok_or_else(|| GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, format!("Object {} not found", hash_str))))?;
+        .ok_or_else(|| GikError::NotFound(format!("Object {} not found", hash_str)))?;
 
     let (obj_type, size, content) = crate::core::objects::decompress_object(&compressed_data[..])?;
 
@@ -22,7 +22,7 @@ pub fn cat_file(storage: &Storage, hash_str: &str, p: bool, t: bool, s: bool) ->
         stdout.write_all(&content)?;
         stdout.flush()?;
     } else {
-        return Err(GikError::Io(std::io::Error::other("Must provide one of -p, -t, or -s")));
+        return Err(GikError::Validation("Must provide one of -p, -t, or -s".to_string()));
     }
 
     Ok(())

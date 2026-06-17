@@ -8,11 +8,11 @@ use crate::commands::checkout::checkout;
 pub fn pull(storage: &Storage) -> Result<()> {
     let status = get_status(storage)?;
     if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-        return Err(GikError::Io(std::io::Error::other("Working directory has uncommitted changes. Please commit or stash them before pulling.")));
+        return Err(GikError::DirtyWorkspace("Working directory has uncommitted changes. Please commit or stash them before pulling.".to_string()));
     }
 
     let url = storage.config().get("remote.origin.url")?
-        .ok_or_else(|| GikError::Io(std::io::Error::other("No remote configured. Use 'gik config remote.origin.url <url>'")))?;
+        .ok_or_else(|| GikError::Config("No remote configured. Use 'gik config remote.origin.url <url>'".to_string()))?;
     
     let _ = dotenvy::dotenv(); // load .env if exists
     let token = std::env::var("GITHUB_TOKEN").ok();
@@ -23,7 +23,7 @@ pub fn pull(storage: &Storage) -> Result<()> {
 
     println!("Discovering remote refs for branch '{}'...", branch);
     let remote_head = client.discover_fetch_refs(branch)?
-        .ok_or_else(|| GikError::Io(std::io::Error::other(format!("Remote branch '{}' not found", branch))))?;
+        .ok_or_else(|| GikError::Branch(format!("Remote branch '{}' not found", branch)))?;
         
     let local_head = storage.commits().get_current_head()?;
     

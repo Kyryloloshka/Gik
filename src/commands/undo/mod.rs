@@ -13,7 +13,7 @@ pub fn undo(storage: &Storage) -> Result<()> {
                     crate::core::workspace::restore_workspace(storage, &h)?;
                     // Sync index too
                     let meta = storage.commits().get_commit_meta(&h)?
-                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Parent commit meta missing during undo"))?;
+                        .ok_or_else(|| crate::error::GikError::NotFound("Parent commit meta missing during undo".to_string()))?;
                     let tree_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
                     storage.index().set_index_state(&tree_files)?;
                 } else {
@@ -27,7 +27,7 @@ pub fn undo(storage: &Storage) -> Result<()> {
                 if let Some(h) = old_head {
                     crate::core::workspace::restore_workspace(storage, &h)?;
                     let meta = storage.commits().get_commit_meta(&h)?
-                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Commit meta missing during undo checkout"))?;
+                        .ok_or_else(|| crate::error::GikError::NotFound("Commit meta missing during undo checkout".to_string()))?;
                     let tree_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
                     storage.index().set_index_state(&tree_files)?;
                 } else {

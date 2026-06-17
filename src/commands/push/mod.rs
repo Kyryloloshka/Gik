@@ -6,10 +6,10 @@ pub fn push(storage: &Storage) -> Result<()> {
     let _ = dotenvy::dotenv(); // load .env if exists
 
     let current_head = storage.commits().get_current_head()?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No HEAD found"))?;
+        .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
 
     let remote_url = storage.config().get_local("remote.origin.url")?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "remote.origin.url not set. Use `gik config --local remote.origin.url <url>`"))?;
+        .ok_or_else(|| crate::error::GikError::Config("remote.origin.url not set. Use `gik config --local remote.origin.url <url>`".to_string()))?;
 
     let token = std::env::var("GITHUB_TOKEN").ok();
     
@@ -45,7 +45,7 @@ pub fn push(storage: &Storage) -> Result<()> {
     println!("Compressing {} objects into Packfile...", missing.len());
     
     let mut dummy_hasher = Sha1::new();
-    let mut temp_pack = tempfile::tempfile().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    let mut temp_pack = tempfile::tempfile().map_err(|e| crate::error::GikError::Io(e))?;
     let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
     
     for hash in missing {
@@ -74,40 +74,40 @@ pub fn push(storage: &Storage) -> Result<()> {
             let type_id = match type_str.as_str() {
                 "tree" => 2u8,
                 "blob" => 3u8,
-                _ => return Err(crate::error::GikError::Io(std::io::Error::other("Unknown object type in storage"))),
+                _ => return Err(crate::error::GikError::Validation("Unknown object type in storage".to_string())),
             };
             (type_id, size as usize, payload)
         } else {
-            return Err(crate::error::GikError::Io(std::io::Error::other(format!("Missing object {}", hash))));
+            return Err(crate::error::GikError::NotFound(format!("Missing object {}", hash)));
         };
         
         write_object_header(&mut temp_pack, obj_type, size, &mut dummy_hasher)?;
         
         use std::io::Write;
         let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-        let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
-        temp_pack.write_all(&zlibbed).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(e))?;
+        let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
+        temp_pack.write_all(&zlibbed).map_err(|e| crate::error::GikError::Io(e))?;
     }
     
     // We must manually compute checksum for the whole file. 
     // This is not perfectly streaming because we read it back once, but it solves the memory issue.
     use std::io::{Read, Seek, SeekFrom};
-    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(e))?;
     let mut real_hasher = Sha1::new();
     let mut buffer = [0u8; 8192];
     loop {
-        let n = temp_pack.read(&mut buffer).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+        let n = temp_pack.read(&mut buffer).map_err(|e| crate::error::GikError::Io(e))?;
         if n == 0 { break; }
         real_hasher.update(&buffer[..n]);
     }
     let checksum = real_hasher.finalize();
-    temp_pack.seek(SeekFrom::End(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    temp_pack.seek(SeekFrom::End(0)).map_err(|e| crate::error::GikError::Io(e))?;
     use std::io::Write;
-    temp_pack.write_all(&checksum).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    temp_pack.write_all(&checksum).map_err(|e| crate::error::GikError::Io(e))?;
     
     // Reset cursor to start for sending
-    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(std::io::Error::other(e.to_string())))?;
+    temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(e))?;
     
     let current_branch = storage.session().get_current_bookmark()?.unwrap_or_else(|| "main".to_string());
     

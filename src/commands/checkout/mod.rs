@@ -14,9 +14,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     if !force {
         let status = get_status(storage)?;
         if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-            return Err(GikError::Io(std::io::Error::other(
-                "You have uncommitted changes. Use --force to discard them."
-            )));
+            return Err(crate::error::GikError::DirtyWorkspace("Working directory is not clean. Use --force to discard changes.".to_string()));
         }
     }
 
@@ -26,7 +24,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
         resolved_bookmark = Some(hash.to_string());
         h
     } else if hash.len() == 40 {
-        Hash::from_hex(hash).map_err(|e| GikError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
+        Hash::from_hex(hash).map_err(|e| GikError::Validation(format!("Invalid hash format: {}", e)))?
     } else {
         let all_objects = storage.objects().list_all_objects()?;
         let matches: Vec<Hash> = all_objects
@@ -35,22 +33,17 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
             .collect();
 
         if matches.is_empty() {
-            return Err(GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Commit not found: {}", hash)
-            )));
+            return Err(GikError::NotFound(format!("Commit not found: {}", hash)));
         }
         if matches.len() > 1 {
-            return Err(GikError::Io(std::io::Error::other(
-                format!("Ambiguous hash: {}", hash)
-            )));
+            return Err(GikError::AmbiguousHash(hash.to_string()));
         }
         matches[0]
     };
 
     // 3. Ensure the found hash is a commit
     let meta = storage.commits().get_commit_meta(&full_hash)?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Object {} is not a commit", full_hash)))?;
+        .ok_or_else(|| crate::error::GikError::NotFound(format!("Object {} is not a commit", full_hash)))?;
 
     // 4. Restore Workspace
     restore_workspace(storage, &full_hash)?;

@@ -5,17 +5,11 @@ use std::fs;
 use std::path::Path;
 
 pub fn restore(storage: &Storage, path: &str) -> Result<()> {
-    let head = storage.commits().get_current_head()?;
-    let head_hash = match head {
-        Some(h) => h,
-        None => return Err(crate::error::GikError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No commits to restore from"
-        ))),
-    };
+    let head_hash = storage.commits().get_current_head()?
+        .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found to restore from".to_string()))?;
 
     let meta = storage.commits().get_commit_meta(&head_hash)?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "HEAD commit metadata missing"))?;
+        .ok_or_else(|| crate::error::GikError::NotFound("HEAD commit metadata missing".to_string()))?;
     let head_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
 
     if path == "." {
@@ -43,10 +37,7 @@ pub fn restore(storage: &Storage, path: &str) -> Result<()> {
                 println!("File not in HEAD, unstaging {}...", normalized);
                 storage.index().unstage_file(&normalized)?;
             } else {
-                return Err(crate::error::GikError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("pathspec '{}' did not match any files in HEAD", normalized)
-                )));
+                return Err(crate::error::GikError::NotFound(format!("pathspec '{}' did not match any files in HEAD", normalized)));
             }
         }
     }
@@ -67,17 +58,11 @@ fn get_blob_bytes(storage: &Storage, hash: &Hash) -> Result<Vec<u8>> {
     if let Some(compressed) = storage.objects().get_object(hash)? {
         let (obj_type, _size, content) = crate::core::objects::decompress_object(&compressed[..])?;
         if obj_type != "blob" {
-            return Err(crate::error::GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Object {} is not a blob", hash)
-            )));
+            return Err(crate::error::GikError::Validation(format!("Object {} is not a blob", hash)));
         }
         Ok(content)
     } else {
-        Err(crate::error::GikError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Blob {} not found", hash)
-        )))
+        Err(crate::error::GikError::NotFound(format!("Blob {} not found", hash)))
     }
 }
 

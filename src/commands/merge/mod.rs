@@ -12,11 +12,11 @@ use std::path::Path;
 
 pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     let current_head = storage.commits().get_current_head()?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No HEAD found"))?;
+        .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
 
     let status = get_status(storage)?;
     if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-        return Err(GikError::Io(std::io::Error::other("Working directory is not clean. Please commit or restore changes before merging.")));
+        return Err(crate::error::GikError::DirtyWorkspace("Working directory is not clean. Please commit or restore changes before merging.".to_string()));
     }
 
     let full_hash = if let Some(h) = storage.refs().get_ref(target)? {
@@ -31,10 +31,10 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
             .collect();
 
         if matches.is_empty() {
-            return Err(GikError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, format!("Commit not found: {}", target))));
+            return Err(crate::error::GikError::NotFound(format!("Commit not found: {}", target)));
         }
         if matches.len() > 1 {
-            return Err(GikError::Io(std::io::Error::other(format!("Ambiguous hash: {}", target))));
+            return Err(crate::error::GikError::AmbiguousHash(target.to_string()));
         }
         matches[0]
     };
@@ -131,7 +131,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                             .default(0)
                             .items(&selections[..])
                             .interact()
-                            .map_err(|e| GikError::Io(std::io::Error::other(e)))?;
+                            .map_err(|e| crate::error::GikError::Merge(e.to_string()))?;
 
                         match selection {
                             0 => {
@@ -157,7 +157,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                                 crate::commands::stage::stage(storage, path)?;
                             }
                             _ => {
-                                return Err(GikError::Io(std::io::Error::other("Merge aborted by user")));
+                                return Err(crate::error::GikError::Aborted("Merge aborted by user".to_string()));
                             }
                         }
                     }

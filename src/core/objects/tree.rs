@@ -170,7 +170,7 @@ fn recursive_tree_walk(
     files: &mut HashMap<String, Hash>,
 ) -> crate::error::Result<()> {
     let obj_data = storage.objects().get_object(tree_hash)?
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Tree object {} not found", tree_hash)))?;
+        .ok_or_else(|| crate::error::GikError::NotFound(format!("Tree object {} not found", tree_hash)))?;
     
     let (obj_type, _, content) = crate::core::objects::decompress_object(&obj_data[..])?;
     if obj_type != "tree" {

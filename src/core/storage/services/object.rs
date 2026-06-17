@@ -47,17 +47,11 @@ impl<'a> ObjectService<'a> {
         if let Some(compressed_data) = self.get_object(hash)? {
             let (obj_type, _size, content) = crate::core::objects::decompress_object(&compressed_data[..])?;
             if obj_type != "blob" {
-                return Err(crate::error::GikError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Object {} is not a blob (type: {})", hash, obj_type)
-                )));
+                return Err(crate::error::GikError::Validation(format!("Object {} is not a blob (type: {})", hash, obj_type)));
             }
             Ok(String::from_utf8_lossy(&content).to_string())
         } else {
-            Err(crate::error::GikError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Blob {} not found in storage", hash)
-            )))
+            return Err(crate::error::GikError::NotFound(format!("Loose object {} not found", hash)));
         }
     }
 }
