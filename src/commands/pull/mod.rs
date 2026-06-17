@@ -19,7 +19,10 @@ pub fn pull(storage: &Storage) -> Result<()> {
     let client = GitClient::new(url, token);
     
     let current_bookmark = storage.session().get_current_bookmark()?;
-    let branch = current_bookmark.as_deref().unwrap_or("main");
+    let branch = match &current_bookmark {
+        Some(b) => b,
+        None => return Err(GikError::Branch("You are not currently on a branch (Detached HEAD state). Please checkout a branch before pulling.".to_string())),
+    };
 
     println!("Discovering remote refs for branch '{}'...", branch);
     let remote_head = client.discover_fetch_refs(branch)?
