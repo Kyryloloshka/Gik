@@ -14,6 +14,7 @@ pub fn pull(storage: &Storage) -> Result<()> {
     let url = storage.config().get("remote.origin.url")?
         .ok_or_else(|| GikError::Io(std::io::Error::other("No remote configured. Use 'gik config remote.origin.url <url>'")))?;
     
+    let _ = dotenvy::dotenv(); // load .env if exists
     let token = std::env::var("GITHUB_TOKEN").ok();
     let client = GitClient::new(url, token);
     
