@@ -49,7 +49,10 @@ impl Storage {
     }
 
     pub fn objects(&self) -> ObjectService<'_> {
-        ObjectService { objects_dir: &self.objects_dir }
+        ObjectService { 
+            objects_dir: &self.objects_dir,
+            repo: &self.repo,
+        }
     }
 
     pub fn refs(&self) -> RefService<'_> {

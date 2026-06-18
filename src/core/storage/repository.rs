@@ -10,6 +10,8 @@ pub const TRANSACTION_LOG: TableDefinition<u64, Vec<u8>> = TableDefinition::new(
 pub const REDO_LOG: TableDefinition<u64, Vec<u8>> = TableDefinition::new("redo_log");
 pub const SESSION: TableDefinition<&str, &str> = TableDefinition::new("session");
 pub const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
+pub const PACKFILES: TableDefinition<u32, &str> = TableDefinition::new("packfiles");
+pub const PACKFILE_INDEX: TableDefinition<&[u8; 20], (u32, u64)> = TableDefinition::new("packfile_index");
 
 pub struct Repository {
     pub(crate) db: Database,
@@ -34,6 +36,8 @@ impl Repository {
             let _ = write_txn.open_table(REDO_LOG)?;
             let _ = write_txn.open_table(SESSION)?;
             let _ = write_txn.open_table(CONFIG)?;
+            let _ = write_txn.open_table(PACKFILES)?;
+            let _ = write_txn.open_table(PACKFILE_INDEX)?;
         }
         write_txn.commit()?;
         Ok(())

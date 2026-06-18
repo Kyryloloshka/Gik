@@ -88,6 +88,19 @@ pub fn build_packfile(storage: &crate::core::storage::Storage, missing: Vec<crat
             let mut encoder = flate2::write::ZlibEncoder::new(temp_pack, flate2::Compression::default());
             std::io::copy(&mut payload_stream, &mut encoder).map_err(|e| crate::error::GikError::Io(e))?;
             temp_pack = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
+        } else if let Some(compressed) = storage.objects().get_object(&hash)? {
+            let (type_str, size, payload) = crate::core::objects::decompress_object(&compressed[..])?;
+            let type_id = match type_str.as_str() {
+                "tree" => 2u8,
+                "blob" => 3u8,
+                _ => return Err(crate::error::GikError::Validation(format!("Unknown object type {}", type_str))),
+            };
+            
+            write_object_header(&mut temp_pack, type_id, size as usize, &mut dummy_hasher)?;
+            
+            let mut encoder = flate2::write::ZlibEncoder::new(temp_pack, flate2::Compression::default());
+            encoder.write_all(&payload).map_err(|e| crate::error::GikError::Io(e))?;
+            temp_pack = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
         } else {
             return Err(crate::error::GikError::NotFound(format!("Missing object {}", hash)));
         }

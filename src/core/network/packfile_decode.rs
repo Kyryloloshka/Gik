@@ -1,26 +1,120 @@
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 use crate::error::{Result, GikError};
 use crate::core::storage::Storage;
 use crate::core::hash::Hash;
 use flate2::bufread::ZlibDecoder;
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use sha1::{Sha1, Digest};
 use crate::core::models::CommitMeta;
 use indicatif::{ProgressBar, ProgressStyle};
+use crate::core::pack::utils::{apply_delta, read_object_header};
+use std::collections::HashMap;
 
 struct PendingDelta {
     base_hash: Hash,
     delta_data: Vec<u8>,
+    offset: u64,
+}
+
+struct PositionTracker<R> {
+    inner: R,
+    pos: u64,
+}
+
+impl<R: Read> Read for PositionTracker<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl<R: std::io::BufRead> std::io::BufRead for PositionTracker<R> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+    fn consume(&mut self, amt: usize) {
+        self.pos += amt as u64;
+        self.inner.consume(amt);
+    }
+}
+
+fn get_base_payload(
+    hash: &Hash,
+    current_pack_index: &HashMap<Hash, u64>,
+    pack_path: &std::path::Path,
+    storage: &Storage,
+) -> Result<Option<(String, Vec<u8>)>> {
+    if let Some(&offset) = current_pack_index.get(hash) {
+        let mut file = std::fs::File::open(pack_path).map_err(|e| GikError::Io(e))?;
+        file.seek(SeekFrom::Start(offset)).map_err(|e| GikError::Io(e))?;
+        let mut buf_reader = std::io::BufReader::new(file);
+        let (obj_type, _) = read_object_header(&mut buf_reader)?;
+        
+        if obj_type == 7 { // OBJ_REF_DELTA
+            let mut base_hash_bytes = [0u8; 20];
+            buf_reader.read_exact(&mut base_hash_bytes).map_err(|e| GikError::Io(e))?;
+            let base_hash = Hash(base_hash_bytes);
+            
+            let mut zlib = ZlibDecoder::new(&mut buf_reader);
+            let mut delta_data = Vec::new();
+            zlib.read_to_end(&mut delta_data).map_err(|e| GikError::Io(e))?;
+            
+            let (type_str, base_payload) = get_base_payload(&base_hash, current_pack_index, pack_path, storage)?
+                .ok_or_else(|| GikError::Io(std::io::Error::other(format!("Missing base for delta: {}", base_hash))))?;
+                
+            let target_payload = apply_delta(&base_payload, &delta_data)?;
+            return Ok(Some((type_str, target_payload)));
+        } else if obj_type == 6 {
+            return Err(GikError::Io(std::io::Error::other("OBJ_OFS_DELTA not supported yet")));
+        } else {
+            let type_str = match obj_type {
+                1 => "commit",
+                2 => "tree",
+                3 => "blob",
+                _ => return Err(GikError::Io(std::io::Error::other(format!("Unsupported pack object type: {}", obj_type)))),
+            };
+            let mut zlib = ZlibDecoder::new(&mut buf_reader);
+            let mut decompressed = Vec::new();
+            zlib.read_to_end(&mut decompressed).map_err(|e| GikError::Io(e))?;
+            return Ok(Some((type_str.to_string(), decompressed)));
+        }
+    } else {
+        if let Ok(Some(compressed_base)) = storage.objects().get_object(hash) {
+            let (type_str, _, base_payload) = crate::core::objects::decompress_object(&compressed_base[..])
+                .map_err(|e| GikError::Io(e))?;
+            return Ok(Some((type_str, base_payload)));
+        }
+        return Ok(None);
+    }
 }
 
 pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<()> {
-    let mut reader = std::io::BufReader::new(reader_in);
+    // 1. Save stream to disk
     let mut header = [0u8; 12];
-    reader.read_exact(&mut header)?;
+    reader_in.read_exact(&mut header).map_err(|e| GikError::Io(e))?;
     if &header[0..4] != b"PACK" {
         return Err(GikError::Io(std::io::Error::other(format!("Invalid packfile signature: {:?}", String::from_utf8_lossy(&header)))));
     }
+    
+    let pack_dir = storage.objects_dir.join("pack");
+    std::fs::create_dir_all(&pack_dir).map_err(|e| GikError::Io(e))?;
+    
+    let pack_id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as u32;
+    let pack_name = format!("pack-{}.pack", pack_id);
+    let pack_path = pack_dir.join(&pack_name);
+    
+    let mut file = std::fs::File::create(&pack_path).map_err(|e| GikError::Io(e))?;
+    file.write_all(&header).map_err(|e| GikError::Io(e))?;
+    std::io::copy(reader_in, &mut file).map_err(|e| GikError::Io(e))?;
+    file.sync_all().map_err(|e| GikError::Io(e))?;
+    
+    // 2. Parse and index
+    let file = std::fs::File::open(&pack_path).map_err(|e| GikError::Io(e))?;
+    let mut tracker = PositionTracker {
+        inner: std::io::BufReader::new(file),
+        pos: 0,
+    };
+    tracker.read_exact(&mut header).map_err(|e| GikError::Io(e))?;
     
     let object_count = u32::from_be_bytes(header[8..12].try_into().unwrap());
     let pb = ProgressBar::new(object_count as u64);
@@ -28,37 +122,28 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
         .unwrap()
         .progress_chars("#>-"));
-    pb.set_message("Decoding objects...");
+    pb.set_message("Indexing packfile...");
     
     let mut pending_deltas = Vec::new();
+    let mut current_pack_index = HashMap::new(); // Hash -> offset
+    let mut commit_metas = Vec::new();
     
     for _i in 0..object_count {
         pb.inc(1);
-        let mut byte = [0u8; 1];
-        reader.read_exact(&mut byte)?;
+        let offset = tracker.pos;
         
-        let obj_type = (byte[0] >> 4) & 7;
-        let mut _size = (byte[0] & 15) as u64;
-        let mut shift = 4;
+        let (obj_type, _size) = read_object_header(&mut tracker)?;
         
-        let mut current_byte = byte[0];
-        while (current_byte & 0x80) != 0 {
-            reader.read_exact(&mut byte)?;
-            current_byte = byte[0];
-            _size |= ((current_byte & 0x7f) as u64) << shift;
-            shift += 7;
-        }
-        
-        if obj_type == 7 {
+        if obj_type == 7 { // OBJ_REF_DELTA
             let mut base_hash_bytes = [0u8; 20];
-            reader.read_exact(&mut base_hash_bytes)?;
+            tracker.read_exact(&mut base_hash_bytes).map_err(|e| GikError::Io(e))?;
             let base_hash = Hash(base_hash_bytes);
             
-            let mut zlib = ZlibDecoder::new(&mut reader);
+            let mut zlib = ZlibDecoder::new(&mut tracker);
             let mut delta_data = Vec::new();
-            zlib.read_to_end(&mut delta_data)?;
+            zlib.read_to_end(&mut delta_data).map_err(|e| GikError::Io(e))?;
             
-            pending_deltas.push(PendingDelta { base_hash, delta_data });
+            pending_deltas.push(PendingDelta { base_hash, delta_data, offset });
             continue;
         } else if obj_type == 6 {
             return Err(GikError::Io(std::io::Error::other("OBJ_OFS_DELTA not supported yet")));
@@ -70,35 +155,29 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
             3 => "blob",
             _ => return Err(GikError::Io(std::io::Error::other(format!("Unsupported pack object type: {}", obj_type)))),
         };
-        let mut zlib = ZlibDecoder::new(&mut reader);
-        let mut decompressed = Vec::new();
-        zlib.read_to_end(&mut decompressed)?;
         
-        // Construct git object header + data
+        let mut zlib = ZlibDecoder::new(&mut tracker);
+        let mut decompressed = Vec::new();
+        zlib.read_to_end(&mut decompressed).map_err(|e| GikError::Io(e))?;
+        
         let header_str = format!("{} {}\0", type_str, decompressed.len());
         let mut full_obj = header_str.into_bytes();
         full_obj.extend_from_slice(&decompressed);
         
-        // Hash it
         let mut hasher = Sha1::new();
         hasher.update(&full_obj);
         let hash_bytes: [u8; 20] = hasher.finalize().into();
         let hash = Hash::from(hash_bytes);
         
-        // Compress it for our storage
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&full_obj)?;
-        let compressed = encoder.finish()?;
-        
-        storage.objects().write_object(&hash, &compressed)?;
+        current_pack_index.insert(hash.clone(), offset);
         
         if obj_type == 1 {
             let meta = parse_commit_meta(&decompressed)?;
-            storage.commits().insert_commit_meta(&hash, meta)?;
+            commit_metas.push((hash, meta));
         }
     }
     
-    pb.finish_with_message("Decoding completed.");
+    pb.finish_with_message("Indexing completed.");
     
     let pb_deltas = ProgressBar::new(pending_deltas.len() as u64);
     pb_deltas.set_style(ProgressStyle::default_bar()
@@ -113,10 +192,9 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
         let mut next_pending = Vec::new();
         
         for delta in pending_deltas {
-            if let Ok(Some(compressed_base)) = storage.objects().get_object(&delta.base_hash) {
-                let (type_str, _, base_payload) = crate::core::objects::decompress_object(&compressed_base[..])
-                    .map_err(|e| GikError::Io(e))?;
-                
+            let base_payload_opt = get_base_payload(&delta.base_hash, &current_pack_index, &pack_path, storage)?;
+            
+            if let Some((type_str, base_payload)) = base_payload_opt {
                 let target_payload = apply_delta(&base_payload, &delta.delta_data)?;
                 
                 let header_str = format!("{} {}\0", type_str, target_payload.len());
@@ -128,15 +206,11 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
                 let hash_bytes: [u8; 20] = hasher.finalize().into();
                 let hash = Hash::from(hash_bytes);
                 
-                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(&full_obj)?;
-                let compressed = encoder.finish()?;
-                
-                storage.objects().write_object(&hash, &compressed)?;
+                current_pack_index.insert(hash.clone(), delta.offset);
                 
                 if type_str == "commit" {
                     let meta = parse_commit_meta(&target_payload)?;
-                    storage.commits().insert_commit_meta(&hash, meta)?;
+                    commit_metas.push((hash, meta));
                 }
                 
                 resolved_any = true;
@@ -154,78 +228,27 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
     }
     
     pb_deltas.finish_with_message("Deltas resolved.");
-    Ok(())
-}
-
-fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>> {
-    let mut d_idx = 0;
     
-    let mut _base_size = 0;
-    let mut shift = 0;
-    loop {
-        if d_idx >= delta.len() { return Err(GikError::Io(std::io::Error::other("Delta truncated"))); }
-        let b = delta[d_idx];
-        d_idx += 1;
-        _base_size |= ((b & 0x7f) as usize) << shift;
-        shift += 7;
-        if b & 0x80 == 0 { break; }
-    }
-    
-    let mut result_size = 0;
-    let mut shift = 0;
-    loop {
-        if d_idx >= delta.len() { return Err(GikError::Io(std::io::Error::other("Delta truncated"))); }
-        let b = delta[d_idx];
-        d_idx += 1;
-        result_size |= ((b & 0x7f) as usize) << shift;
-        shift += 7;
-        if b & 0x80 == 0 { break; }
-    }
-    
-    let mut result = Vec::with_capacity(result_size);
-    
-    while d_idx < delta.len() {
-        let cmd = delta[d_idx];
-        d_idx += 1;
+    // 3. Write index to Redb
+    let write_txn = storage.repo.db.begin_write()?;
+    {
+        let mut pack_table = write_txn.open_table(crate::core::storage::repository::PACKFILES)?;
+        pack_table.insert(pack_id, pack_name.as_str())?;
         
-        if cmd & 0x80 != 0 {
-            // Copy
-            let mut offset = 0;
-            let mut size = 0;
-            
-            if cmd & 0x01 != 0 { offset |= delta[d_idx] as usize; d_idx += 1; }
-            if cmd & 0x02 != 0 { offset |= (delta[d_idx] as usize) << 8; d_idx += 1; }
-            if cmd & 0x04 != 0 { offset |= (delta[d_idx] as usize) << 16; d_idx += 1; }
-            if cmd & 0x08 != 0 { offset |= (delta[d_idx] as usize) << 24; d_idx += 1; }
-            
-            if cmd & 0x10 != 0 { size |= delta[d_idx] as usize; d_idx += 1; }
-            if cmd & 0x20 != 0 { size |= (delta[d_idx] as usize) << 8; d_idx += 1; }
-            if cmd & 0x40 != 0 { size |= (delta[d_idx] as usize) << 16; d_idx += 1; }
-            
-            if size == 0 { size = 0x10000; }
-            
-            if offset + size > base.len() {
-                return Err(GikError::Io(std::io::Error::other(format!("Delta copy out of bounds: offset={}, size={}, base_len={}", offset, size, base.len()))));
-            }
-            result.extend_from_slice(&base[offset..offset + size]);
-        } else if cmd != 0 {
-            // Insert
-            let size = cmd as usize;
-            if d_idx + size > delta.len() {
-                return Err(GikError::Io(std::io::Error::other("Delta insert out of bounds")));
-            }
-            result.extend_from_slice(&delta[d_idx..d_idx + size]);
-            d_idx += size;
-        } else {
-            return Err(GikError::Io(std::io::Error::other("Invalid delta opcode 0")));
+        let mut index_table = write_txn.open_table(crate::core::storage::repository::PACKFILE_INDEX)?;
+        
+        for (hash, offset) in current_pack_index {
+            index_table.insert(&hash.0, (pack_id, offset))?;
         }
     }
+    write_txn.commit()?;
     
-    if result.len() != result_size {
-        return Err(GikError::Io(std::io::Error::other(format!("Delta result size mismatch: expected {}, got {}", result_size, result.len()))));
+    // Save commit metas
+    for (hash, meta) in commit_metas {
+        storage.commits().insert_commit_meta(&hash, meta)?;
     }
     
-    Ok(result)
+    Ok(())
 }
 
 fn parse_commit_meta(content: &[u8]) -> Result<CommitMeta> {
@@ -245,26 +268,16 @@ fn parse_commit_meta(content: &[u8]) -> Result<CommitMeta> {
         } else if let Some(rest) = line.strip_prefix("parent ") {
             parent_hashes.push(Hash::from_hex(rest).map_err(|e| GikError::Io(std::io::Error::other(e)))?);
         } else if let Some(rest) = line.strip_prefix("author ") {
-            // author Name <email> 1234567890 +0000
             if let Some(tz_idx) = rest.rfind(" +") {
                 if let Some(ts_idx) = rest[..tz_idx].rfind(' ') {
-                    let ts_str = &rest[ts_idx + 1..tz_idx];
-                    timestamp = ts_str.parse().unwrap_or(0);
                     author = rest[..ts_idx].to_string();
+                    timestamp = rest[ts_idx + 1..tz_idx].parse().unwrap_or(0);
                 }
             }
-            if author.is_empty() { author = rest.to_string(); }
         }
     }
     
-    let mut message = String::new();
-    for line in lines {
-        message.push_str(line);
-        message.push('\n');
-    }
-    if message.ends_with('\n') {
-        message.pop();
-    }
+    let message = lines.collect::<Vec<_>>().join("\n");
     
     Ok(CommitMeta {
         tree_hash,
