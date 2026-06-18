@@ -7,6 +7,18 @@ use redb::ReadableTable;
 use std::io::Read;
 use std::collections::HashMap;
 
+fn deserialize_index_entry(value: &[u8]) -> Result<IndexEntry> {
+    match bincode::deserialize(value) {
+        Ok(e) => Ok(e),
+        Err(_) if value.len() == 20 => {
+            let mut h = [0u8; 20];
+            h.copy_from_slice(value);
+            Ok(IndexEntry { hash: Hash(h), size: 0, mtime: 0 })
+        }
+        Err(e) => Err(crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))),
+    }
+}
+
 pub struct IndexService<'a> {
     pub(crate) repo: &'a Repository,
 }
@@ -16,10 +28,10 @@ impl<'a> IndexService<'a> {
         let write_txn = self.repo.db.begin_write()?;
         {
             let old_entry = {
-                let table = write_txn.open_table(STAGE_INDEX_V2)?;
+                let table = write_txn.open_table(STAGE_INDEX)?;
                 let guard = table.get(path)?;
                 if let Some(g) = guard {
-                    Some(bincode::deserialize(g.value()).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?)
+                    Some(deserialize_index_entry(g.value())?)
                 } else {
                     None
                 }
@@ -33,7 +45,7 @@ impl<'a> IndexService<'a> {
                 objects.insert(&hash.0, compressed)?;
             }
 
-            let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
             let new_entry = IndexEntry { hash: hash.clone(), size, mtime };
             let encoded = bincode::serialize(&new_entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             index.insert(path, encoded.as_slice())?;
@@ -50,10 +62,10 @@ impl<'a> IndexService<'a> {
     pub fn unstage_file(&self, path: &str) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
-            let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
             let entry: Option<IndexEntry> = {
                 if let Some(guard) = index.get(path)? {
-                    Some(bincode::deserialize(guard.value()).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?)
+                    Some(deserialize_index_entry(guard.value())?)
                 } else {
                     None
                 }
@@ -74,10 +86,10 @@ impl<'a> IndexService<'a> {
     pub fn get_staged_entry(&self, path: &str) -> Result<Option<IndexEntry>> {
         let entry = {
             let read_txn = self.repo.db.begin_read()?;
-            let table = read_txn.open_table(STAGE_INDEX_V2)?;
+            let table = read_txn.open_table(STAGE_INDEX)?;
             let guard_opt = table.get(path)?;
             if let Some(guard) = guard_opt {
-                Some(bincode::deserialize(guard.value()).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?)
+                Some(deserialize_index_entry(guard.value())?)
             } else {
                 None
             }
@@ -92,7 +104,7 @@ impl<'a> IndexService<'a> {
     pub fn set_staged_entry(&self, path: &str, entry: &IndexEntry) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
-            let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
             let encoded = bincode::serialize(entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             index.insert(path, encoded.as_slice())?;
         }
@@ -107,11 +119,11 @@ impl<'a> IndexService<'a> {
 
     pub fn get_all_staged_entries(&self) -> Result<Vec<(String, IndexEntry)>> {
         let read_txn = self.repo.db.begin_read()?;
-        let table = read_txn.open_table(STAGE_INDEX_V2)?;
+        let table = read_txn.open_table(STAGE_INDEX)?;
         let mut entries = Vec::new();
         for result in table.iter()? {
             let (path, value) = result?;
-            let entry: IndexEntry = bincode::deserialize(value.value()).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let entry = deserialize_index_entry(value.value())?;
             entries.push((path.value().to_string(), entry));
         }
         Ok(entries)
@@ -125,7 +137,7 @@ impl<'a> IndexService<'a> {
     pub fn set_index_state(&self, files: &HashMap<String, Hash>) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
-            let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
             let mut keys = Vec::new();
             for result in index.iter()? {
                 let (path, _) = result?;
@@ -145,3 +157,4 @@ impl<'a> IndexService<'a> {
         Ok(())
     }
 }
+

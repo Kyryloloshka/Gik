@@ -44,7 +44,7 @@ impl<'a> UndoService<'a> {
         {
             match action {
                 UndoAction::Unstage { path, old_entry } => {
-                    let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+                    let mut index = write_txn.open_table(STAGE_INDEX)?;
                     if let Some(entry) = old_entry {
                         let encoded = bincode::serialize(&entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
                         index.insert(path.as_str(), encoded.as_slice())?;
@@ -53,7 +53,7 @@ impl<'a> UndoService<'a> {
                     }
                 }
                 UndoAction::Stage { path, entry: _ } => {
-                    let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+                    let mut index = write_txn.open_table(STAGE_INDEX)?;
                     index.remove(path.as_str())?;
                 }
                 UndoAction::RevertCommit { old_head, new_head } => {
