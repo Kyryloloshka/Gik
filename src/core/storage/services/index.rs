@@ -1,10 +1,10 @@
-use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::models::IndexEntry;
 use crate::core::storage::repository::*;
+use crate::error::Result;
 use redb::ReadableTable;
-use std::io::Read;
 use std::collections::HashMap;
+use std::io::Read;
 
 fn deserialize_index_entry(value: &[u8]) -> Result<IndexEntry> {
     match bincode::deserialize(value) {
@@ -12,9 +12,16 @@ fn deserialize_index_entry(value: &[u8]) -> Result<IndexEntry> {
         Err(_) if value.len() == 20 => {
             let mut h = [0u8; 20];
             h.copy_from_slice(value);
-            Ok(IndexEntry { hash: Hash(h), size: 0, mtime: 0 })
+            Ok(IndexEntry {
+                hash: Hash(h),
+                size: 0,
+                mtime: 0,
+            })
         }
-        Err(e) => Err(crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))),
+        Err(e) => Err(crate::error::GikError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e,
+        ))),
     }
 }
 
@@ -25,7 +32,14 @@ pub struct IndexService<'a> {
 }
 
 impl<'a> IndexService<'a> {
-    pub fn stage_file<R: Read>(&self, path: &str, hash: &Hash, size: u64, mtime: u64, reader: R) -> Result<Option<IndexEntry>> {
+    pub fn stage_file<R: Read>(
+        &self,
+        path: &str,
+        hash: &Hash,
+        size: u64,
+        mtime: u64,
+        reader: R,
+    ) -> Result<Option<IndexEntry>> {
         let exists = self.storage.objects().contains_object(hash)?;
         if !exists {
             crate::core::objects::compress_blob(reader, size, hash, self.storage)?;
@@ -44,8 +58,14 @@ impl<'a> IndexService<'a> {
             };
 
             let mut index = write_txn.open_table(STAGE_INDEX)?;
-            let new_entry = IndexEntry { hash: hash.clone(), size, mtime };
-            let encoded = bincode::serialize(&new_entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let new_entry = IndexEntry {
+                hash: hash.clone(),
+                size,
+                mtime,
+            };
+            let encoded = bincode::serialize(&new_entry).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
             index.insert(path, encoded.as_slice())?;
 
             Ok(old_entry)
@@ -106,7 +126,9 @@ impl<'a> IndexService<'a> {
                 }
             };
             let mut index = write_txn.open_table(STAGE_INDEX)?;
-            let encoded = bincode::serialize(entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let encoded = bincode::serialize(entry).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
             index.insert(path, encoded.as_slice())?;
             Ok(old_entry)
         };
@@ -115,7 +137,11 @@ impl<'a> IndexService<'a> {
     }
 
     pub fn set_staged_hash(&self, path: &str, hash: &Hash) -> Result<Option<IndexEntry>> {
-        let entry = IndexEntry { hash: hash.clone(), size: 0, mtime: 0 };
+        let entry = IndexEntry {
+            hash: hash.clone(),
+            size: 0,
+            mtime: 0,
+        };
         self.set_staged_entry(path, &entry)
     }
 
@@ -150,8 +176,14 @@ impl<'a> IndexService<'a> {
             }
 
             for (path, hash) in files {
-                let entry = IndexEntry { hash: hash.clone(), size: 0, mtime: 0 };
-                let encoded = bincode::serialize(&entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                let entry = IndexEntry {
+                    hash: hash.clone(),
+                    size: 0,
+                    mtime: 0,
+                };
+                let encoded = bincode::serialize(&entry).map_err(|e| {
+                    crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
                 index.insert(path.as_str(), encoded.as_slice())?;
             }
         }
@@ -159,4 +191,3 @@ impl<'a> IndexService<'a> {
         Ok(())
     }
 }
-

@@ -1,5 +1,5 @@
 use crate::core::merge::strategy::{MergeResult, MergeStrategy};
-use similar::{TextDiff, DiffOp};
+use similar::{DiffOp, TextDiff};
 use std::cmp;
 
 pub struct TextMergeStrategy;
@@ -15,21 +15,32 @@ fn get_hunks<'a>(ops: &[DiffOp], new_lines: &[&'a str]) -> Vec<Hunk<'a>> {
     let mut hunks = Vec::new();
     for op in ops {
         match op {
-            DiffOp::Insert { old_index, new_index, new_len } => {
+            DiffOp::Insert {
+                old_index,
+                new_index,
+                new_len,
+            } => {
                 hunks.push(Hunk {
                     base_start: *old_index,
                     base_end: *old_index,
                     inserted_lines: new_lines[*new_index..*new_index + *new_len].to_vec(),
                 });
             }
-            DiffOp::Delete { old_index, old_len, .. } => {
+            DiffOp::Delete {
+                old_index, old_len, ..
+            } => {
                 hunks.push(Hunk {
                     base_start: *old_index,
                     base_end: *old_index + *old_len,
                     inserted_lines: vec![],
                 });
             }
-            DiffOp::Replace { old_index, old_len, new_index, new_len } => {
+            DiffOp::Replace {
+                old_index,
+                old_len,
+                new_index,
+                new_len,
+            } => {
                 hunks.push(Hunk {
                     base_start: *old_index,
                     base_end: *old_index + *old_len,
@@ -61,7 +72,9 @@ fn group_hunks<'a>(ours: Vec<Hunk<'a>>, theirs: Vec<Hunk<'a>>) -> Vec<ConflictGr
         let mut group = ConflictGroup::default();
 
         // 1. Start a new group with the earliest available hunk
-        let mut group_end = if i < ours.len() && (j == theirs.len() || ours[i].base_start <= theirs[j].base_start) {
+        let mut group_end = if i < ours.len()
+            && (j == theirs.len() || ours[i].base_start <= theirs[j].base_start)
+        {
             let end = ours[i].base_end;
             group.ours.push(ours[i].clone());
             i += 1;
@@ -96,9 +109,18 @@ fn group_hunks<'a>(ours: Vec<Hunk<'a>>, theirs: Vec<Hunk<'a>>) -> Vec<ConflictGr
         }
 
         // 3. Compute the overall boundaries for the accumulated group
-        group.base_start = group.ours.first().map(|h| h.base_start)
+        group.base_start = group
+            .ours
+            .first()
+            .map(|h| h.base_start)
             .unwrap_or(usize::MAX)
-            .min(group.theirs.first().map(|h| h.base_start).unwrap_or(usize::MAX));
+            .min(
+                group
+                    .theirs
+                    .first()
+                    .map(|h| h.base_start)
+                    .unwrap_or(usize::MAX),
+            );
         group.base_end = group_end;
 
         groups.push(group);
@@ -118,8 +140,16 @@ fn apply_groups(base_lines: &[&str], groups: Vec<ConflictGroup>) -> (String, boo
         }
         base_cursor = group.base_end;
 
-        let net_ours: String = group.ours.iter().flat_map(|h| h.inserted_lines.clone()).collect();
-        let net_theirs: String = group.theirs.iter().flat_map(|h| h.inserted_lines.clone()).collect();
+        let net_ours: String = group
+            .ours
+            .iter()
+            .flat_map(|h| h.inserted_lines.clone())
+            .collect();
+        let net_theirs: String = group
+            .theirs
+            .iter()
+            .flat_map(|h| h.inserted_lines.clone())
+            .collect();
 
         if group.ours.is_empty() {
             merged.push_str(&net_theirs);

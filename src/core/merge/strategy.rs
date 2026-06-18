@@ -1,7 +1,7 @@
 pub enum MergeResult {
     /// Conflict resolved automatically (or no changes detected).
     Resolved(Vec<u8>),
-    
+
     /// Unresolvable conflict detected.
     Conflict {
         base: Option<Vec<u8>>,

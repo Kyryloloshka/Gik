@@ -1,11 +1,14 @@
-use crate::error::{Result, GikError};
 use crate::core::storage::Storage;
+use crate::error::{GikError, Result};
 
 pub fn unstage(storage: &Storage, path: String) -> Result<()> {
     // Determine the HEAD tree
     let head_hash = storage.commits().get_current_head()?;
     let head_files = if let Some(h) = head_hash {
-        let meta = storage.commits().get_commit_meta(&h)?.ok_or_else(|| GikError::NotFound("Commit meta missing".to_string()))?;
+        let meta = storage
+            .commits()
+            .get_commit_meta(&h)?
+            .ok_or_else(|| GikError::NotFound("Commit meta missing".to_string()))?;
         crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?
     } else {
         std::collections::HashMap::new()
@@ -40,7 +43,7 @@ pub fn unstage(storage: &Storage, path: String) -> Result<()> {
     }
 
     let normalized_path = path.replace('\\', "/");
-    
+
     // Check if it's in the index
     if storage.index().get_staged_hash(&normalized_path)?.is_some() {
         if let Some(h_hash) = head_files.get(&normalized_path) {
@@ -62,9 +65,15 @@ pub fn unstage(storage: &Storage, path: String) -> Result<()> {
             }
         }
         println!("Unstaged {}", path);
-        storage.commit_batch(crate::core::models::CommandType::Unstage, &format!("gik unstage {}", path))?;
+        storage.commit_batch(
+            crate::core::models::CommandType::Unstage,
+            &format!("gik unstage {}", path),
+        )?;
     } else {
-        return Err(GikError::NotFound(format!("pathspec '{}' did not match any files in the stage", path)));
+        return Err(GikError::NotFound(format!(
+            "pathspec '{}' did not match any files in the stage",
+            path
+        )));
     }
 
     Ok(())

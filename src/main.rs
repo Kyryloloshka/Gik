@@ -38,7 +38,11 @@ fn run_cli() -> Result<()> {
         Commands::Init => {
             commands::init(crate::config::DB_PATH)?;
         }
-        Commands::Clone { url, directory, branch } => {
+        Commands::Clone {
+            url,
+            directory,
+            branch,
+        } => {
             commands::clone::clone(&url, directory, branch)?;
         }
         Commands::Update => {
@@ -48,14 +52,27 @@ fn run_cli() -> Result<()> {
             let cwd = std::env::current_dir()?;
             let repo_root = crate::core::utils::find_repo_root(&cwd)?;
             std::env::set_current_dir(&repo_root)?;
-            let storage = crate::core::storage::Storage::new(crate::config::DB_PATH)?;
+            let storage = match &other {
+                Commands::Status { .. }
+                | Commands::Log { .. }
+                | Commands::Diff { .. }
+                | Commands::CatFile { .. }
+                | Commands::Show { .. } => {
+                    crate::core::storage::Storage::open_read_only(crate::config::DB_PATH)?
+                }
+                _ => crate::core::storage::Storage::new(crate::config::DB_PATH)?,
+            };
 
             match other {
                 Commands::Stage { path } => {
                     let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);
                     commands::stage(&storage, resolved_path)?;
                 }
-                Commands::Commit { message, staged, branch } => {
+                Commands::Commit {
+                    message,
+                    staged,
+                    branch,
+                } => {
                     commands::commit(&storage, message, staged, branch)?;
                 }
                 Commands::Log { all, json } => {
@@ -74,7 +91,10 @@ fn run_cli() -> Result<()> {
                 Commands::Unstage { path } => {
                     commands::unstage(&storage, path)?;
                 }
-                Commands::Status { porcelain, is_merging } => {
+                Commands::Status {
+                    porcelain,
+                    is_merging,
+                } => {
                     if is_merging {
                         if storage.session().get_merge_head()?.is_some() {
                             std::process::exit(0);
@@ -93,16 +113,26 @@ fn run_cli() -> Result<()> {
                 Commands::Branch { name, delete } => {
                     commands::branch::branch(&storage, name, delete)?;
                 }
-                Commands::Merge { target, continue_merge } => {
+                Commands::Merge {
+                    target,
+                    continue_merge,
+                } => {
                     if continue_merge {
                         commands::merge::continue_merge(&storage)?;
                     } else if let Some(t) = target {
                         commands::merge::merge(&storage, &t)?;
                     } else {
-                        return Err(crate::error::GikError::Validation("Must provide target or --continue".into()));
+                        return Err(crate::error::GikError::Validation(
+                            "Must provide target or --continue".into(),
+                        ));
                     }
                 }
-                Commands::Config { key, value, global, import_git } => {
+                Commands::Config {
+                    key,
+                    value,
+                    global,
+                    import_git,
+                } => {
                     commands::config(&storage, key, value, global, import_git)?;
                 }
                 Commands::Push => {
@@ -122,7 +152,5 @@ fn run_cli() -> Result<()> {
         }
     }
 
-
     Ok(())
 }
-

@@ -40,7 +40,8 @@ fn test_compress_decompress_blob() {
     compress_blob(reader, size, &hash, &storage).unwrap();
 
     // Decompress
-    let (obj_type, de_size, actual_content) = decompress_object(&storage.objects().get_object(&hash).unwrap().unwrap()[..]).unwrap();
+    let (obj_type, de_size, actual_content) =
+        decompress_object(&storage.objects().get_object(&hash).unwrap().unwrap()[..]).unwrap();
 
     assert_eq!(obj_type, "blob");
     assert_eq!(de_size, size);

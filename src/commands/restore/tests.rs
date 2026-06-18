@@ -38,7 +38,7 @@ fn test_restore_dot() {
     restore(&env.storage, ".").unwrap();
     assert_eq!(fs::read_to_string("a.txt").unwrap(), "v1");
     assert!(fs::metadata("b.txt").is_ok());
-    // Note: Standard Git restore . doesn't delete untracked files by default, 
+    // Note: Standard Git restore . doesn't delete untracked files by default,
     // but our restore_workspace does if it's not in the tree.
     // Actually, restore_workspace deletes files on disk that are NOT in target tree.
     assert!(fs::metadata("c.txt").is_err());

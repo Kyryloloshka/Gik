@@ -1,7 +1,7 @@
-use std::collections::{HashSet, VecDeque};
-use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::storage::Storage;
+use crate::error::Result;
+use std::collections::{HashSet, VecDeque};
 
 /// Finds the Lowest Common Ancestor (LCA) of two commits using BFS.
 pub fn find_lowest_common_ancestor(
@@ -17,7 +17,7 @@ pub fn find_lowest_common_ancestor(
     // visited sets intersect. This efficiently finds the Lowest Common Ancestor (LCA).
     let mut queue1 = VecDeque::new();
     let mut queue2 = VecDeque::new();
-    
+
     let mut visited1 = HashSet::new();
     let mut visited2 = HashSet::new();
 
@@ -61,5 +61,3 @@ pub fn find_lowest_common_ancestor(
 
     Ok(None)
 }
-
-

@@ -1,8 +1,8 @@
 use super::*;
-use crate::core::hash::Hash;
 use crate::commands::test_utils::{TestEnv, HELLO_CONTENT, HELLO_HASH};
-use std::io::Write;
+use crate::core::hash::Hash;
 use std::fs::File;
+use std::io::Write;
 
 #[test]
 fn test_commit_creates_objects_and_updates_head() {
@@ -61,7 +61,10 @@ fn test_commit_auto_stages_files() {
     assert_eq!(staged_files.len(), 1);
 
     let expected_blob_hash = Hash::from_hex(HELLO_HASH).unwrap();
-    assert!(storage.objects().contains_object(&expected_blob_hash).unwrap());
+    assert!(storage
+        .objects()
+        .contains_object(&expected_blob_hash)
+        .unwrap());
 }
 
 #[test]
@@ -77,7 +80,11 @@ fn test_ignore_system_removes_from_index() {
 
     // 1. Stage the file manually
     crate::commands::stage(storage, file_path.to_string()).unwrap();
-    assert!(storage.index().get_staged_hash(file_path).unwrap().is_some());
+    assert!(storage
+        .index()
+        .get_staged_hash(file_path)
+        .unwrap()
+        .is_some());
 
     // 2. Add to .gik.ignore
     {
@@ -121,7 +128,7 @@ fn test_recursive_tree_generation() {
     // Verify root tree is stored
     assert!(storage.objects().contains_object(&root_tree_hash).unwrap());
 
-    // Total objects should be: 
+    // Total objects should be:
     // 1 blob (test.txt)
     // 1 tree (subdir)
     // 1 tree (root)
@@ -145,7 +152,11 @@ fn test_first_commit_creates_main_bookmark() {
     commit(storage, "initial commit".to_string(), false, None).unwrap();
 
     let head = storage.commits().get_current_head().unwrap().unwrap();
-    let main_ref = storage.refs().get_ref("main").unwrap().expect("main ref should exist");
+    let main_ref = storage
+        .refs()
+        .get_ref("main")
+        .unwrap()
+        .expect("main ref should exist");
     assert_eq!(head, main_ref);
 }
 
@@ -165,7 +176,7 @@ fn test_commit_moves_bookmarks() {
 
     // Create a manual bookmark
     storage.refs().set_ref("my-feature", &head1).unwrap();
-    
+
     // Checkout 'main' to set it as hint
     crate::commands::checkout::checkout(storage, "main", false).unwrap();
 
@@ -199,7 +210,7 @@ fn test_smart_deduplication_via_hint() {
 
     // 1. Checkout b1 (sets hint)
     crate::commands::checkout::checkout(storage, "b1", false).unwrap();
-    
+
     // 2. Commit
     {
         let mut f = File::create("test.txt").unwrap();
@@ -213,13 +224,19 @@ fn test_smart_deduplication_via_hint() {
 
     // 3. Checkout b2 (sets hint)
     crate::commands::checkout::checkout(storage, "b2", true).unwrap();
-    
+
     // 4. Commit via explicit flag
     {
         let mut f = File::create("test.txt").unwrap();
         f.write_all(b"update 2").unwrap();
     }
-    commit(storage, "commit via b2 explicit".to_string(), false, Some("b2".to_string())).unwrap();
+    commit(
+        storage,
+        "commit via b2 explicit".to_string(),
+        false,
+        Some("b2".to_string()),
+    )
+    .unwrap();
     let head3 = storage.commits().get_current_head().unwrap().unwrap();
 
     assert_eq!(storage.refs().get_ref("b2").unwrap().unwrap(), head3);

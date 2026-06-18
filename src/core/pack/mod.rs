@@ -1,3 +1,3 @@
-pub mod encoder;
 pub mod discovery;
+pub mod encoder;
 pub mod utils;

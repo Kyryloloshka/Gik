@@ -17,11 +17,13 @@ pub fn update() -> Result<()> {
         .update()
         .map_err(|e| crate::error::GikError::Network(format!("Failed to parse JSON: {}", e)))?;
 
-
     if status.updated() {
         println!("Successfully updated to version {}!", status.version());
     } else {
-        println!("Gik is already up to date (version {}).", cargo_crate_version!());
+        println!(
+            "Gik is already up to date (version {}).",
+            cargo_crate_version!()
+        );
     }
 
     Ok(())

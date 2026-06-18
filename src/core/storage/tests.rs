@@ -1,7 +1,8 @@
 use super::*;
-use tempfile::NamedTempFile;
 use crate::core::hash::Hash;
+use redb::ReadableDatabase;
 use redb::ReadableTable;
+use tempfile::NamedTempFile;
 
 #[test]
 fn test_storage_init() {
@@ -32,16 +33,19 @@ fn test_storage_stage_file() {
     let hash = Hash([1u8; 20]); // Dummy hash
     let size = content.len() as u64;
 
-    storage.index().stage_file(path, &hash, size, 0, &content[..]).unwrap();
+    storage
+        .index()
+        .stage_file(path, &hash, size, 0, &content[..])
+        .unwrap();
 
     // Verify STAGE_INDEX
     let read_txn = storage.repo.db.begin_read().unwrap();
     let index = read_txn.open_table(STAGE_INDEX).unwrap();
     let staged_guard = index.get(path).unwrap().unwrap();
-    let entry: crate::core::models::IndexEntry = bincode::deserialize(staged_guard.value()).unwrap();
+    let entry: crate::core::models::IndexEntry =
+        bincode::deserialize(staged_guard.value()).unwrap();
     assert_eq!(entry.hash.0, hash.0);
 
     // Verify Filesystem Object
     assert!(storage.objects().contains_object(&hash).unwrap());
 }
-

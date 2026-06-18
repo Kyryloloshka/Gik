@@ -1,6 +1,6 @@
 use super::*;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
 
 #[test]
 fn test_diff_unstaged() {

@@ -1,24 +1,29 @@
-use crate::core::storage::Storage;
-use crate::error::Result;
-use crate::core::hash::Hash;
-use crate::core::workspace::get_status;
 use crate::core::graph::find_lowest_common_ancestor;
+use crate::core::hash::Hash;
 use crate::core::merge::analyzer::{analyze_trees, MergeAction};
-use crate::core::merge::strategy::{MergeStrategy, MergeResult};
+use crate::core::merge::strategy::{MergeResult, MergeStrategy};
 use crate::core::merge::text::TextMergeStrategy;
-use dialoguer::{Select, theme::ColorfulTheme};
+use crate::core::storage::Storage;
+use crate::core::workspace::get_status;
+use crate::error::Result;
+use colored::Colorize;
+use dialoguer::{theme::ColorfulTheme, Select};
+use similar::TextDiff;
 use std::fs;
 use std::path::Path;
-use similar::TextDiff;
-use colored::Colorize;
 
 pub fn merge(storage: &Storage, target: &str) -> Result<()> {
-    let current_head = storage.commits().get_current_head()?
+    let current_head = storage
+        .commits()
+        .get_current_head()?
         .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
 
     let status = get_status(storage)?;
     if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-        return Err(crate::error::GikError::DirtyWorkspace("Working directory is not clean. Please commit or restore changes before merging.".to_string()));
+        return Err(crate::error::GikError::DirtyWorkspace(
+            "Working directory is not clean. Please commit or restore changes before merging."
+                .to_string(),
+        ));
     }
 
     let (full_hash, _) = crate::core::utils::resolve_hash(storage, target)?;
@@ -33,23 +38,23 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         println!("Already up to date (Fast-forward is not needed as target is an ancestor).");
         return Ok(());
     }
-    
+
     if lca == Some(current_head) {
         println!("Fast-forwarding to {}", full_hash);
-        
+
         // Update current branch reference if we are on a branch
         let current_bookmark = storage.session().get_current_bookmark()?;
         if let Some(ref bm) = current_bookmark {
             storage.refs().set_ref(bm, &full_hash)?;
         }
-        
+
         // Restore workspace and index
         let meta = storage.commits().get_commit_meta(&full_hash)?.unwrap();
         crate::core::workspace::restore_workspace(storage, &full_hash)?;
         let tree_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
         storage.index().set_index_state(&tree_files)?;
         storage.commits().set_head(&full_hash)?;
-        
+
         return Ok(());
     }
 
@@ -64,13 +69,18 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     };
 
     let base_tree = lca_meta.map(|m| m.tree_hash);
-    
-    let actions = analyze_trees(storage, base_tree.as_ref(), &head_meta.tree_hash, &target_meta.tree_hash)?;
+
+    let actions = analyze_trees(
+        storage,
+        base_tree.as_ref(),
+        &head_meta.tree_hash,
+        &target_meta.tree_hash,
+    )?;
 
     let text_strategy = TextMergeStrategy;
     let mut conflicts_exist = false;
     let mut resolve_all_manually = false;
-    
+
     // Set MERGE_HEAD early so if they abort/Ctrl+C, the state is remembered.
     storage.session().set_merge_head(&full_hash)?;
 
@@ -90,12 +100,25 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                 storage.index().unstage_file(&path)?;
             }
             MergeAction::Merge { base, ours, theirs } => {
-                let base_content = if let Some(h) = base { get_blob_content(storage, &h)? } else { None };
-                let ours_content = if let Some(h) = ours { get_blob_content(storage, &h)?.unwrap_or_default() } else { Vec::new() };
-                let theirs_content = if let Some(h) = theirs { get_blob_content(storage, &h)?.unwrap_or_default() } else { Vec::new() };
+                let base_content = if let Some(h) = base {
+                    get_blob_content(storage, &h)?
+                } else {
+                    None
+                };
+                let ours_content = if let Some(h) = ours {
+                    get_blob_content(storage, &h)?.unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                let theirs_content = if let Some(h) = theirs {
+                    get_blob_content(storage, &h)?.unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
 
-                let result = text_strategy.merge(base_content.as_deref(), &ours_content, &theirs_content);
-                
+                let result =
+                    text_strategy.merge(base_content.as_deref(), &ours_content, &theirs_content);
+
                 match result {
                     MergeResult::Resolved(content) => {
                         println!("Auto-merged {}", path);
@@ -105,7 +128,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                     MergeResult::Conflict { ours, theirs, .. } => {
                         conflicts_exist = true;
                         println!("\nConflict in {}", path);
-                        
+
                         // Print diff
                         let ours_str = String::from_utf8_lossy(&ours);
                         let theirs_str = String::from_utf8_lossy(&theirs);
@@ -124,27 +147,31 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                             let mut combined = Vec::new();
                             combined.extend_from_slice(b"<<<<<<< HEAD\n");
                             combined.extend_from_slice(&ours);
-                            if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                            if !ours.ends_with(b"\n") && !ours.is_empty() {
+                                combined.extend_from_slice(b"\n");
+                            }
                             combined.extend_from_slice(b"=======\n");
                             combined.extend_from_slice(&theirs);
-                            if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
+                            if !theirs.ends_with(b"\n") && !theirs.is_empty() {
+                                combined.extend_from_slice(b"\n");
+                            }
                             combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
-                            
+
                             write_content_to_disk(&combined, &path)?;
                             println!("Conflict markers written to {}.", path);
                             continue;
                         }
 
                         let selections = &[
-                            "Keep Ours", 
-                            "Take Theirs", 
-                            "Accept Both (Ours + Theirs)", 
-                            "Accept Both (Theirs + Ours)", 
+                            "Keep Ours",
+                            "Take Theirs",
+                            "Accept Both (Ours + Theirs)",
+                            "Accept Both (Theirs + Ours)",
                             "Resolve manually in editor",
                             "Resolve ALL conflicts manually in editor",
-                            "Abort Merge"
+                            "Abort Merge",
                         ];
-                        
+
                         let selection = Select::with_theme(&ColorfulTheme::default())
                             .with_prompt(format!("Resolve conflict in {}", path))
                             .default(0)
@@ -179,19 +206,24 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                                 let mut combined = Vec::new();
                                 combined.extend_from_slice(b"<<<<<<< HEAD\n");
                                 combined.extend_from_slice(&ours);
-                                if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                                if !ours.ends_with(b"\n") && !ours.is_empty() {
+                                    combined.extend_from_slice(b"\n");
+                                }
                                 combined.extend_from_slice(b"=======\n");
                                 combined.extend_from_slice(&theirs);
-                                if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
-                                combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
-                                
+                                if !theirs.ends_with(b"\n") && !theirs.is_empty() {
+                                    combined.extend_from_slice(b"\n");
+                                }
+                                combined
+                                    .extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
+
                                 write_content_to_disk(&combined, &path)?;
-                                
+
                                 println!("Conflict markers written to {}.", path);
                                 println!("Please open the file in your editor, resolve the conflict, save it, and press Enter to continue...");
                                 let mut input = String::new();
                                 std::io::stdin().read_line(&mut input).unwrap();
-                                
+
                                 crate::commands::stage::stage(storage, path)?;
                             }
                             5 => {
@@ -199,18 +231,25 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                                 let mut combined = Vec::new();
                                 combined.extend_from_slice(b"<<<<<<< HEAD\n");
                                 combined.extend_from_slice(&ours);
-                                if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                                if !ours.ends_with(b"\n") && !ours.is_empty() {
+                                    combined.extend_from_slice(b"\n");
+                                }
                                 combined.extend_from_slice(b"=======\n");
                                 combined.extend_from_slice(&theirs);
-                                if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
-                                combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
-                                
+                                if !theirs.ends_with(b"\n") && !theirs.is_empty() {
+                                    combined.extend_from_slice(b"\n");
+                                }
+                                combined
+                                    .extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
+
                                 write_content_to_disk(&combined, &path)?;
                                 println!("Conflict markers written to {}.", path);
                             }
                             _ => {
                                 storage.session().clear_merge_head()?;
-                                return Err(crate::error::GikError::Aborted("Merge aborted by user".to_string()));
+                                return Err(crate::error::GikError::Aborted(
+                                    "Merge aborted by user".to_string(),
+                                ));
                             }
                         }
                     }
@@ -228,7 +267,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     if conflicts_exist {
         println!("All conflicts resolved!");
     }
-    
+
     println!("Merge files staged.");
 
     let status = crate::core::workspace::get_status(storage)?;
@@ -236,13 +275,18 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         if let Ok(content) = std::fs::read_to_string(path) {
             if content.contains("<<<<<<< HEAD") && content.contains("=======") {
                 println!("Warning: File {} still contains conflict markers.", path);
-                println!("Auto-commit aborted. Please resolve conflicts and run `gik merge --continue`.");
+                println!(
+                    "Auto-commit aborted. Please resolve conflicts and run `gik merge --continue`."
+                );
                 return Ok(());
             }
         }
     }
 
-    let current_bookmark = storage.session().get_current_bookmark()?.unwrap_or_else(|| current_head.to_string());
+    let current_bookmark = storage
+        .session()
+        .get_current_bookmark()?
+        .unwrap_or_else(|| current_head.to_string());
     crate::commands::commit::commit(
         storage,
         format!("Merge {} into {}", target, current_bookmark),
@@ -259,13 +303,21 @@ pub fn continue_merge(storage: &Storage) -> Result<()> {
         for (path, _) in status.unstaged.iter().chain(status.staged.iter()) {
             if let Ok(content) = std::fs::read_to_string(path) {
                 if content.contains("<<<<<<< HEAD") && content.contains("=======") {
-                    return Err(crate::error::GikError::Validation(format!("Cannot continue merge. File {} still contains conflict markers.", path)));
+                    return Err(crate::error::GikError::Validation(format!(
+                        "Cannot continue merge. File {} still contains conflict markers.",
+                        path
+                    )));
                 }
             }
         }
-        let current_head = storage.commits().get_current_head()?
+        let current_head = storage
+            .commits()
+            .get_current_head()?
             .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
-        let current_bookmark = storage.session().get_current_bookmark()?.unwrap_or_else(|| current_head.to_string());
+        let current_bookmark = storage
+            .session()
+            .get_current_bookmark()?
+            .unwrap_or_else(|| current_head.to_string());
         crate::commands::commit::commit(
             storage,
             format!("Merge {} into {}", merge_head, current_bookmark),
@@ -274,7 +326,9 @@ pub fn continue_merge(storage: &Storage) -> Result<()> {
         )?;
         Ok(())
     } else {
-        Err(crate::error::GikError::Validation("No merge in progress".to_string()))
+        Err(crate::error::GikError::Validation(
+            "No merge in progress".to_string(),
+        ))
     }
 }
 

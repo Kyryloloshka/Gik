@@ -1,9 +1,9 @@
-use crate::error::Result;
-use crate::core::storage::Storage;
-use crate::core::ignore::IgnoreMatcher;
 use crate::core::hash::Hash;
+use crate::core::ignore::IgnoreMatcher;
 use crate::core::models::{FileState, RepoStatus};
 use crate::core::objects::get_commit_tree_files;
+use crate::core::storage::Storage;
+use crate::error::Result;
 use std::collections::{HashMap, HashSet};
 
 /// Recursively scans the workspace and stages all non-ignored files.
@@ -49,10 +49,9 @@ pub fn clean_ignored_from_index(storage: &Storage) -> Result<()> {
 pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
     let head_hash = storage.commits().get_current_head()?;
     let head_files = if let Some(h) = head_hash {
-        let meta = storage
-            .commits()
-            .get_commit_meta(&h)?
-            .ok_or_else(|| crate::error::GikError::NotFound("Head commit meta not found".to_string()))?;
+        let meta = storage.commits().get_commit_meta(&h)?.ok_or_else(|| {
+            crate::error::GikError::NotFound("Head commit meta not found".to_string())
+        })?;
         get_commit_tree_files(storage, &meta.tree_hash)?
     } else {
         HashMap::new()
@@ -115,8 +114,12 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
 /// Restores the workspace files from a specific commit.
 pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> {
     // 1. Get commit meta
-    let meta = storage.commits().get_commit_meta(target_commit)?
-        .ok_or_else(|| crate::error::GikError::NotFound(format!("Commit {} not found", target_commit)))?;
+    let meta = storage
+        .commits()
+        .get_commit_meta(target_commit)?
+        .ok_or_else(|| {
+            crate::error::GikError::NotFound(format!("Commit {} not found", target_commit))
+        })?;
 
     // 2. Get flat file map from target tree
     let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
@@ -124,26 +127,28 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     // 3. Clean current disk: remove files that are not in the target tree
     let disk_files = get_disk_state(storage)?;
     for (path, _) in disk_files {
-        if !tree_files.contains_key(&path)
-            && std::path::Path::new(&path).exists() {
-                std::fs::remove_file(&path)?;
-            }
+        if !tree_files.contains_key(&path) && std::path::Path::new(&path).exists() {
+            std::fs::remove_file(&path)?;
+        }
     }
 
     // 4. Restore target files
     for (path, hash) in tree_files {
-        let compressed_data = storage.objects().get_object(&hash)?
+        let compressed_data = storage
+            .objects()
+            .get_object(&hash)?
             .ok_or_else(|| crate::error::GikError::NotFound(format!("Blob {} not found", hash)))?;
-        
-        let (_obj_type, _size, content) = crate::core::objects::decompress_object(&compressed_data[..])?;
-        
+
+        let (_obj_type, _size, content) =
+            crate::core::objects::decompress_object(&compressed_data[..])?;
+
         // Ensure parent directories exist
         if let Some(parent) = std::path::Path::new(&path).parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        
+
         std::fs::write(&path, content)?;
     }
 
@@ -155,7 +160,7 @@ use ignore::WalkBuilder;
 fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
     let mut disk_files = HashMap::new();
     let root = std::env::current_dir()?;
-    
+
     let index_entries: HashMap<String, crate::core::models::IndexEntry> = storage
         .index()
         .get_all_staged_entries()?
@@ -165,10 +170,12 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
     let mut builder = WalkBuilder::new(&root);
     builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
     builder.hidden(false); // Do not skip hidden files like .env
-    
+
     builder.filter_entry(move |entry| {
         let name = entry.file_name().to_string_lossy();
-        name != crate::config::GIK_DIR_NAME && name != crate::config::GIT_DIR_NAME && !name.contains("gik_test")
+        name != crate::config::GIK_DIR_NAME
+            && name != crate::config::GIT_DIR_NAME
+            && !name.contains("gik_test")
     });
 
     for result in builder.build() {
@@ -183,12 +190,15 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
         let path = entry.path();
         let relative_path = path.strip_prefix(&root).unwrap_or(path);
         let path_str = relative_path.to_str().unwrap_or("");
-        if path_str.is_empty() { continue; }
-        
+        if path_str.is_empty() {
+            continue;
+        }
+
         let normalized_path = path_str.replace('\\', "/");
         if let Ok(metadata) = entry.metadata() {
             let size = metadata.len();
-            let mtime = metadata.modified()
+            let mtime = metadata
+                .modified()
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
                 .duration_since(std::time::SystemTime::UNIX_EPOCH)
                 .unwrap_or(std::time::Duration::from_secs(0))
@@ -220,10 +230,12 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
     let mut builder = WalkBuilder::new(&root);
     builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
     builder.hidden(false);
-    
+
     builder.filter_entry(move |entry| {
         let name = entry.file_name().to_string_lossy();
-        name != crate::config::GIK_DIR_NAME && name != crate::config::GIT_DIR_NAME && !name.contains("gik_test")
+        name != crate::config::GIK_DIR_NAME
+            && name != crate::config::GIT_DIR_NAME
+            && !name.contains("gik_test")
     });
 
     for result in builder.build() {
@@ -238,21 +250,27 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
         let path = entry.path();
         let relative_path = path.strip_prefix(&root).unwrap_or(path);
         let path_str = relative_path.to_str().unwrap_or("");
-        if path_str.is_empty() { continue; }
-        
+        if path_str.is_empty() {
+            continue;
+        }
+
         let normalized_path = path_str.replace('\\', "/");
         let file = std::fs::File::open(&path)?;
         let meta = file.metadata()?;
         let hash = crate::core::objects::hash_blob(&file, meta.len())?;
-        
-        let mtime = meta.modified()
+
+        let mtime = meta
+            .modified()
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
         let file = std::fs::File::open(&path)?;
-        let old_entry = storage.index().stage_file(&normalized_path, &hash, meta.len(), mtime, file)?;
+        let old_entry =
+            storage
+                .index()
+                .stage_file(&normalized_path, &hash, meta.len(), mtime, file)?;
         let new_entry = storage.index().get_staged_entry(&normalized_path)?;
         storage.log_action(crate::core::models::UndoAction::UpdateIndex {
             path: normalized_path,
@@ -263,7 +281,6 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
 
     Ok(())
 }
-
 
 fn remove_ignored_from_index(storage: &Storage, matcher: &IgnoreMatcher) -> Result<()> {
     let currently_staged = storage.index().get_all_staged_files()?;

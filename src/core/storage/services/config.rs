@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::core::storage::repository::*;
+use crate::error::Result;
 use redb::ReadableTable;
 use std::collections::HashMap;
 
@@ -29,7 +29,7 @@ impl<'a> ConfigService<'a> {
         let config_path = dirs::home_dir()
             .ok_or_else(|| crate::error::GikError::Config("Home directory not found".to_string()))?
             .join(".gikconfig");
-        
+
         if !config_path.exists() {
             return Ok(None);
         }
@@ -49,7 +49,7 @@ impl<'a> ConfigService<'a> {
         let config_path = dirs::home_dir()
             .ok_or_else(|| crate::error::GikError::Config("Home directory not found".to_string()))?
             .join(".gikconfig");
-        
+
         let mut config_map = HashMap::new();
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
@@ -59,14 +59,14 @@ impl<'a> ConfigService<'a> {
                 }
             }
         }
-        
+
         config_map.insert(key.to_string(), value.to_string());
-        
+
         let mut new_content = String::new();
         for (k, v) in config_map {
             new_content.push_str(&format!("{}={}\n", k, v));
         }
-        
+
         std::fs::write(config_path, new_content)?;
         Ok(())
     }

@@ -28,7 +28,11 @@ fn test_merge_conflict_same_line() {
     let theirs = "fn one() { println!(\"theirs\"); }\n";
 
     match merge_text(base, ours, theirs) {
-        MergeResult::Conflict { base: b, ours: o, theirs: t } => {
+        MergeResult::Conflict {
+            base: b,
+            ours: o,
+            theirs: t,
+        } => {
             assert_eq!(b.unwrap(), base.as_bytes());
             assert_eq!(o, ours.as_bytes());
             assert_eq!(t, theirs.as_bytes());
@@ -54,8 +58,8 @@ fn test_merge_identical_changes() {
 #[test]
 fn test_merge_one_side_deleted_other_kept() {
     let base = "line1\nline2\nline3\n";
-    let ours = "line1\nline3\n"; 
-    let theirs = "line1\nline2\nline3\n"; 
+    let ours = "line1\nline3\n";
+    let theirs = "line1\nline2\nline3\n";
 
     match merge_text(base, ours, theirs) {
         MergeResult::Resolved(content) => {
@@ -68,8 +72,8 @@ fn test_merge_one_side_deleted_other_kept() {
 #[test]
 fn test_merge_conflict_delete_vs_modify() {
     let base = "line1\nline2\nline3\n";
-    let ours = "line1\nline3\n"; 
-    let theirs = "line1\nline2_modified\nline3\n"; 
+    let ours = "line1\nline3\n";
+    let theirs = "line1\nline2_modified\nline3\n";
 
     match merge_text(base, ours, theirs) {
         MergeResult::Conflict { .. } => {}

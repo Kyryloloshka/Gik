@@ -1,17 +1,18 @@
+pub mod clone_ops;
+pub mod commit_ops;
 pub mod graph;
 pub mod hash;
 pub mod ignore;
 pub mod merge;
-pub mod clone_ops;
 pub mod models;
+pub mod network;
 pub mod objects;
+pub mod pack;
 pub mod storage;
 pub mod utils;
 pub mod workspace;
-pub mod pack;
-pub mod network;
-pub mod commit_ops;
 
+pub use commit_ops::*;
 pub use graph::*;
 pub use hash::*;
 pub use ignore::*;
@@ -21,5 +22,3 @@ pub use objects::*;
 pub use storage::*;
 pub use utils::*;
 pub use workspace::*;
-pub use commit_ops::*;
-

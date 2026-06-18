@@ -1,15 +1,15 @@
-use crate::error::Result;
-use crate::core::storage::Storage;
 use crate::core::hash::Hash;
+use crate::core::storage::Storage;
 use crate::core::CommitMeta;
-use std::collections::{HashSet, HashMap};
+use crate::error::Result;
 use colored::*;
 use renderdag::{GraphRenderer, Node, RenderConfig};
+use std::collections::{HashMap, HashSet};
 
 pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
-    
+
     let mut labels: HashMap<Hash, Vec<String>> = HashMap::new();
     for (name, hash) in &refs {
         labels.entry(*hash).or_default().push(name.clone());
@@ -20,10 +20,16 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
 
     let mut start_hashes = HashSet::new();
     if all {
-        if let Some(h) = head { start_hashes.insert(h); }
-        for (_, hash) in &refs { start_hashes.insert(*hash); }
+        if let Some(h) = head {
+            start_hashes.insert(h);
+        }
+        for (_, hash) in &refs {
+            start_hashes.insert(*hash);
+        }
     } else {
-        if let Some(h) = head { start_hashes.insert(h); }
+        if let Some(h) = head {
+            start_hashes.insert(h);
+        }
     }
 
     if start_hashes.is_empty() {
@@ -36,12 +42,14 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     let mut sorted_commits = Vec::new();
 
     fn dfs(
-        hash: Hash, 
-        storage: &Storage, 
-        visited: &mut HashSet<Hash>, 
-        sorted: &mut Vec<(Hash, CommitMeta)>
+        hash: Hash,
+        storage: &Storage,
+        visited: &mut HashSet<Hash>,
+        sorted: &mut Vec<(Hash, CommitMeta)>,
     ) {
-        if visited.contains(&hash) { return; }
+        if visited.contains(&hash) {
+            return;
+        }
         visited.insert(hash);
         if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
             // Visit parents first
@@ -59,7 +67,13 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     let mut heads: Vec<Hash> = start_hashes.into_iter().collect();
     // Sort heads by timestamp so we traverse the newest branch first
     heads.sort_by_key(|h| {
-        storage.commits().get_commit_meta(h).ok().flatten().map(|m| std::cmp::Reverse(m.timestamp)).unwrap_or(std::cmp::Reverse(0))
+        storage
+            .commits()
+            .get_commit_meta(h)
+            .ok()
+            .flatten()
+            .map(|m| std::cmp::Reverse(m.timestamp))
+            .unwrap_or(std::cmp::Reverse(0))
     });
 
     for head_hash in heads {
@@ -89,7 +103,7 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     for (hash, meta) in &sorted_commits {
         dag_nodes.push(Node::new(
             hash.to_string(),
-            meta.parent_hashes.iter().map(|h| h.to_string()).collect()
+            meta.parent_hashes.iter().map(|h| h.to_string()).collect(),
         ));
     }
 
@@ -106,24 +120,27 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
 }
 
 fn graph_padding(rendered_line: &str) -> String {
-    rendered_line.chars().map(|c| match c {
-        // Nodes that continue downwards
-        '⊗' | '⍟' | '●' | '⦿' => '│',
-        // Connections that continue downwards
-        '│' | '╭' | '╮' | '┬' | '┤' | '├' | '╷' | '┊' => '│',
-        // Everything else (Nodes that end, connections that go horizontally or up)
-        _ => ' ',
-    }).collect()
+    rendered_line
+        .chars()
+        .map(|c| match c {
+            // Nodes that continue downwards
+            '⊗' | '⍟' | '●' | '⦿' => '│',
+            // Connections that continue downwards
+            '│' | '╭' | '╮' | '┬' | '┤' | '├' | '╷' | '┊' => '│',
+            // Everything else (Nodes that end, connections that go horizontally or up)
+            _ => ' ',
+        })
+        .collect()
 }
 
 fn print_commit_graph(
-    hash: Hash, 
-    meta: CommitMeta, 
+    hash: Hash,
+    meta: CommitMeta,
     labels: &HashMap<Hash, Vec<String>>,
-    graph_line: &str
+    graph_line: &str,
 ) {
     let padding = graph_padding(graph_line);
-    
+
     let mut header = format!("commit {}", hash).yellow().to_string();
     if let Some(names) = labels.get(&hash) {
         header.push_str(&format!(" ({})", names.join(", ")).cyan().bold().to_string());
@@ -131,15 +148,14 @@ fn print_commit_graph(
 
     println!("{} {}", graph_line.yellow(), header);
     println!("{} Author: {}", padding.yellow(), meta.author);
-    
+
     let datetime = chrono::DateTime::from_timestamp(meta.timestamp as i64, 0)
         .map(|dt| dt.format("%a %b %e %H:%M:%S %Y %z").to_string())
         .unwrap_or_else(|| "Unknown date".to_string());
     println!("{} Date:   {}", padding.yellow(), datetime);
     println!("{}", padding.yellow());
-    
+
     for msg_line in meta.message.lines() {
         println!("{}     {}", padding.yellow(), msg_line);
     }
 }
-

@@ -1,6 +1,6 @@
-use crate::error::Result;
-use crate::core::storage::repository::*;
 use crate::core::models::UndoAction;
+use crate::core::storage::repository::*;
+use crate::error::Result;
 use redb::ReadableTable;
 
 pub struct UndoService<'a> {
@@ -24,7 +24,9 @@ impl<'a> UndoService<'a> {
                 if let Some(b) = bytes {
                     bincode::deserialize(&b.value())?
                 } else {
-                    return Err(crate::error::GikError::NotFound("Transaction log entry missing".to_string()));
+                    return Err(crate::error::GikError::NotFound(
+                        "Transaction log entry missing".to_string(),
+                    ));
                 }
             };
             {
@@ -52,7 +54,6 @@ impl<'a> UndoService<'a> {
         }
     }
 
-
     pub fn pop_last_redo(&self) -> Result<Option<crate::core::models::TransactionBatch>> {
         let write_txn = self.repo.db.begin_write()?;
         let last_id = {
@@ -69,7 +70,9 @@ impl<'a> UndoService<'a> {
                 if let Some(b) = bytes {
                     bincode::deserialize(&b.value())?
                 } else {
-                    return Err(crate::error::GikError::NotFound("Redo log entry missing".to_string()));
+                    return Err(crate::error::GikError::NotFound(
+                        "Redo log entry missing".to_string(),
+                    ));
                 }
             };
             {
@@ -97,7 +100,6 @@ impl<'a> UndoService<'a> {
         }
     }
 
-
     pub fn clear_redo_log(&self) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
@@ -119,8 +121,9 @@ impl<'a> UndoService<'a> {
         let write_txn = self.repo.db.begin_write()?;
         {
             let mut table = write_txn.open_table(REDO_LOG)?;
-            let encoded = bincode::serialize(batch)
-                .map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let encoded = bincode::serialize(batch).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
             table.insert(batch.id, encoded)?;
         }
         write_txn.commit()?;
@@ -131,8 +134,9 @@ impl<'a> UndoService<'a> {
         let write_txn = self.repo.db.begin_write()?;
         {
             let mut table = write_txn.open_table(TRANSACTION_LOG)?;
-            let encoded = bincode::serialize(batch)
-                .map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let encoded = bincode::serialize(batch).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
             table.insert(batch.id, encoded)?;
         }
         write_txn.commit()?;
@@ -171,10 +175,19 @@ impl<'a> UndoService<'a> {
             // Reverse the actions inside the batch so we undo them in LIFO order
             for action in batch.actions.iter().rev() {
                 match action {
-                    UndoAction::UpdateIndex { path, old_entry, new_entry: _ } => {
+                    UndoAction::UpdateIndex {
+                        path,
+                        old_entry,
+                        new_entry: _,
+                    } => {
                         let mut index = write_txn.open_table(STAGE_INDEX)?;
                         if let Some(entry) = old_entry {
-                            let encoded = bincode::serialize(&entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                            let encoded = bincode::serialize(&entry).map_err(|e| {
+                                crate::error::GikError::Io(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    e,
+                                ))
+                            })?;
                             index.insert(path.as_str(), encoded.as_slice())?;
                         } else {
                             index.remove(path.as_str())?;
@@ -194,7 +207,11 @@ impl<'a> UndoService<'a> {
                             heads.insert(&old.0, 1)?;
                         }
                     }
-                    UndoAction::MoveBookmark { name, old_hash, new_hash: _ } => {
+                    UndoAction::MoveBookmark {
+                        name,
+                        old_hash,
+                        new_hash: _,
+                    } => {
                         let mut refs = write_txn.open_table(REFS)?;
                         if let Some(old) = old_hash {
                             refs.insert(name.as_str(), &old.0)?;
@@ -215,10 +232,19 @@ impl<'a> UndoService<'a> {
             // Apply the actions inside the batch in forward order
             for action in batch.actions.iter() {
                 match action {
-                    UndoAction::UpdateIndex { path, old_entry: _, new_entry } => {
+                    UndoAction::UpdateIndex {
+                        path,
+                        old_entry: _,
+                        new_entry,
+                    } => {
                         let mut index = write_txn.open_table(STAGE_INDEX)?;
                         if let Some(entry) = new_entry {
-                            let encoded = bincode::serialize(&entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                            let encoded = bincode::serialize(&entry).map_err(|e| {
+                                crate::error::GikError::Io(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    e,
+                                ))
+                            })?;
                             index.insert(path.as_str(), encoded.as_slice())?;
                         } else {
                             index.remove(path.as_str())?;
@@ -238,7 +264,11 @@ impl<'a> UndoService<'a> {
                         }
                         heads.insert(&new_head.0, 1)?;
                     }
-                    UndoAction::MoveBookmark { name, old_hash: _, new_hash } => {
+                    UndoAction::MoveBookmark {
+                        name,
+                        old_hash: _,
+                        new_hash,
+                    } => {
                         let mut refs = write_txn.open_table(REFS)?;
                         refs.insert(name.as_str(), &new_hash.0)?;
                     }

@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use crate::error::Result;
 use crate::core::hash::Hash;
-use crate::core::storage::Storage;
 use crate::core::objects::tree::get_commit_tree_files;
+use crate::core::storage::Storage;
+use crate::error::Result;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MergeAction {
@@ -42,7 +42,11 @@ pub fn analyze_tree_maps(
     let mut actions = HashMap::new();
 
     let mut all_paths = HashSet::new();
-    for path in base_map.keys().chain(ours_map.keys()).chain(theirs_map.keys()) {
+    for path in base_map
+        .keys()
+        .chain(ours_map.keys())
+        .chain(theirs_map.keys())
+    {
         all_paths.insert(path.clone());
     }
 
@@ -143,11 +147,14 @@ mod tests {
         theirs.insert("file.txt".to_string(), dummy_hash(3));
 
         let actions = analyze_tree_maps(&base, &ours, &theirs);
-        assert_eq!(actions["file.txt"], MergeAction::Merge {
-            base: Some(dummy_hash(1)),
-            ours: Some(dummy_hash(2)),
-            theirs: Some(dummy_hash(3)),
-        });
+        assert_eq!(
+            actions["file.txt"],
+            MergeAction::Merge {
+                base: Some(dummy_hash(1)),
+                ours: Some(dummy_hash(2)),
+                theirs: Some(dummy_hash(3)),
+            }
+        );
     }
 
     #[test]

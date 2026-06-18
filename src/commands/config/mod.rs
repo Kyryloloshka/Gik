@@ -1,12 +1,20 @@
-use crate::error::Result;
 use crate::core::storage::Storage;
+use crate::error::Result;
 use std::process::Command;
 
-pub fn config(storage: &Storage, key: Option<String>, value: Option<String>, global: bool, import_git: bool) -> Result<()> {
+pub fn config(
+    storage: &Storage,
+    key: Option<String>,
+    value: Option<String>,
+    global: bool,
+    import_git: bool,
+) -> Result<()> {
     if import_git {
         println!("Importing Git configuration...");
-        
-        let name_output = Command::new("git").args(["config", "--global", "user.name"]).output();
+
+        let name_output = Command::new("git")
+            .args(["config", "--global", "user.name"])
+            .output();
         if let Ok(output) = name_output {
             if output.status.success() {
                 let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -14,8 +22,10 @@ pub fn config(storage: &Storage, key: Option<String>, value: Option<String>, glo
                 println!("Imported user.name = {}", name);
             }
         }
-        
-        let email_output = Command::new("git").args(["config", "--global", "user.email"]).output();
+
+        let email_output = Command::new("git")
+            .args(["config", "--global", "user.email"])
+            .output();
         if let Ok(output) = email_output {
             if output.status.success() {
                 let email = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -26,7 +36,12 @@ pub fn config(storage: &Storage, key: Option<String>, value: Option<String>, glo
         return Ok(());
     }
 
-    let k = key.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Key is required when not using --import-git"))?;
+    let k = key.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Key is required when not using --import-git",
+        )
+    })?;
 
     if let Some(v) = value {
         if global {

@@ -1,7 +1,7 @@
-use crate::core::storage::Storage;
-use crate::error::Result;
 use crate::core::objects::get_commit_tree_files;
+use crate::core::storage::Storage;
 use crate::core::workspace::{get_status, restore_workspace};
+use crate::error::Result;
 
 #[cfg(test)]
 mod tests;
@@ -12,16 +12,23 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     // 1. Safety Check: Check for uncommitted changes if force is false
     if !force {
         let status = get_status(storage)?;
-        if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty() {
-            return Err(crate::error::GikError::DirtyWorkspace("Working directory is not clean. Use --force to discard changes.".to_string()));
+        if !status.staged.is_empty() || !status.unstaged.is_empty() || !status.untracked.is_empty()
+        {
+            return Err(crate::error::GikError::DirtyWorkspace(
+                "Working directory is not clean. Use --force to discard changes.".to_string(),
+            ));
         }
     }
 
     let (full_hash, resolved_bookmark) = crate::core::utils::resolve_hash(storage, hash)?;
 
     // 3. Ensure the found hash is a commit
-    let meta = storage.commits().get_commit_meta(&full_hash)?
-        .ok_or_else(|| crate::error::GikError::NotFound(format!("Object {} is not a commit", full_hash)))?;
+    let meta = storage
+        .commits()
+        .get_commit_meta(&full_hash)?
+        .ok_or_else(|| {
+            crate::error::GikError::NotFound(format!("Object {} is not a commit", full_hash))
+        })?;
 
     // 4. Restore Workspace
     restore_workspace(storage, &full_hash)?;
@@ -45,6 +52,9 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     });
 
     println!("Switched to commit {}", full_hash);
-    storage.commit_batch(crate::core::models::CommandType::Checkout, &format!("gik checkout {}", hash))?;
+    storage.commit_batch(
+        crate::core::models::CommandType::Checkout,
+        &format!("gik checkout {}", hash),
+    )?;
     Ok(())
 }

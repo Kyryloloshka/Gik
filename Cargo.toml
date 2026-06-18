@@ -9,7 +9,7 @@ authors = ["Gik Developer"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
-redb = "1.1"
+redb = "4.1.0"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3"
 sha1 = "0.10"

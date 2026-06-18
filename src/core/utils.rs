@@ -7,7 +7,9 @@ pub fn find_repo_root(current_dir: &Path) -> Result<PathBuf> {
             return Ok(ancestor.to_path_buf());
         }
     }
-    Err(crate::error::GikError::NotFound("Not a gik repository (or any of the parent directories): .gik".to_string()))
+    Err(crate::error::GikError::NotFound(
+        "Not a gik repository (or any of the parent directories): .gik".to_string(),
+    ))
 }
 
 pub fn resolve_path(cwd: &Path, root_dir: &Path, user_path: &str) -> String {
@@ -29,12 +31,16 @@ pub fn resolve_path(cwd: &Path, root_dir: &Path, user_path: &str) -> String {
     }
 }
 
-pub fn resolve_hash(storage: &crate::core::storage::Storage, target: &str) -> crate::error::Result<(crate::core::hash::Hash, Option<String>)> {
+pub fn resolve_hash(
+    storage: &crate::core::storage::Storage,
+    target: &str,
+) -> crate::error::Result<(crate::core::hash::Hash, Option<String>)> {
     if let Some(h) = storage.refs().get_ref(target)? {
         Ok((h, Some(target.to_string())))
     } else if target.len() == 40 {
-        let h = crate::core::hash::Hash::from_hex(target)
-            .map_err(|e| crate::error::GikError::Validation(format!("Invalid hash format: {}", e)))?;
+        let h = crate::core::hash::Hash::from_hex(target).map_err(|e| {
+            crate::error::GikError::Validation(format!("Invalid hash format: {}", e))
+        })?;
         Ok((h, None))
     } else {
         let all_objects = storage.objects().list_all_objects()?;
@@ -44,7 +50,10 @@ pub fn resolve_hash(storage: &crate::core::storage::Storage, target: &str) -> cr
             .collect();
 
         if matches.is_empty() {
-            return Err(crate::error::GikError::NotFound(format!("Object not found: {}", target)));
+            return Err(crate::error::GikError::NotFound(format!(
+                "Object not found: {}",
+                target
+            )));
         }
         if matches.len() > 1 {
             return Err(crate::error::GikError::AmbiguousHash(target.to_string()));
@@ -62,11 +71,10 @@ mod tests {
     fn test_resolve_path() {
         let root = Path::new("/repo");
         let cwd1 = Path::new("/repo/src");
-        
+
         assert_eq!(resolve_path(cwd1, root, "main.rs"), "src/main.rs");
         assert_eq!(resolve_path(cwd1, root, "."), "src");
         assert_eq!(resolve_path(root, root, "."), ".");
         assert_eq!(resolve_path(root, root, "src/main.rs"), "src/main.rs");
     }
 }
-

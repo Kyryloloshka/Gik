@@ -1,8 +1,8 @@
+use crate::core::hash::Hash;
+use crate::core::objects::{decompress_object, tree::parse_tree};
 use crate::core::storage::Storage;
 use crate::error::Result;
-use crate::core::hash::Hash;
 use std::collections::{HashSet, VecDeque};
-use crate::core::objects::{decompress_object, tree::parse_tree};
 
 pub fn discover_missing_objects(
     storage: &Storage,
@@ -15,10 +15,12 @@ pub fn discover_missing_objects(
     if let Some(r_head) = remote_head {
         let mut queue = VecDeque::new();
         queue.push_back(*r_head);
-        
+
         while let Some(h) = queue.pop_front() {
-            if !known_objects.insert(h) { continue; }
-            
+            if !known_objects.insert(h) {
+                continue;
+            }
+
             if let Some(meta) = storage.commits().get_commit_meta(&h)? {
                 queue.push_back(meta.tree_hash);
                 for parent in meta.parent_hashes {
@@ -46,7 +48,7 @@ pub fn discover_missing_objects(
         if known_objects.contains(&h) || !visited.insert(h) {
             continue;
         }
-        
+
         missing_objects.push(h);
 
         if let Some(meta) = storage.commits().get_commit_meta(&h)? {

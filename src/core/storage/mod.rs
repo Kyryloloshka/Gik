@@ -1,14 +1,14 @@
 pub mod repository;
 pub mod services;
 
-use crate::error::Result;
 use self::repository::*;
-use self::services::index::IndexService;
 use self::services::commit::CommitService;
-use self::services::undo::UndoService;
+use self::services::config::ConfigService;
+use self::services::index::IndexService;
 use self::services::object::ObjectService;
 use self::services::refs::RefService;
-use self::services::config::ConfigService;
+use self::services::undo::UndoService;
+use crate::error::Result;
 use std::path::{Path, PathBuf};
 
 pub struct Storage {
@@ -28,8 +28,19 @@ impl Storage {
             std::fs::create_dir_all(&objects_dir).map_err(|e| crate::error::GikError::Io(e))?;
         }
         let repo = Repository::new(path.as_ref())?;
-        Ok(Self { 
-            repo, 
+        Ok(Self {
+            repo,
+            objects_dir,
+            pending_actions: std::cell::RefCell::new(Vec::new()),
+        })
+    }
+
+    pub fn open_read_only<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let parent = path.as_ref().parent().unwrap_or(Path::new("."));
+        let objects_dir = parent.join(crate::config::OBJECTS_DIR_NAME);
+        let repo = Repository::open_read_only(path.as_ref())?;
+        Ok(Self {
+            repo,
             objects_dir,
             pending_actions: std::cell::RefCell::new(Vec::new()),
         })
@@ -49,7 +60,7 @@ impl Storage {
     }
 
     pub fn objects(&self) -> ObjectService<'_> {
-        ObjectService { 
+        ObjectService {
             objects_dir: &self.objects_dir,
             repo: &self.repo,
         }
@@ -71,12 +82,16 @@ impl Storage {
         self.pending_actions.borrow_mut().push(action);
     }
 
-    pub fn commit_batch(&self, command: crate::core::models::CommandType, description: &str) -> Result<()> {
+    pub fn commit_batch(
+        &self,
+        command: crate::core::models::CommandType,
+        description: &str,
+    ) -> Result<()> {
         let actions = self.pending_actions.replace(Vec::new());
         if actions.is_empty() {
             return Ok(()); // Nothing to log
         }
-        
+
         let batch = crate::core::models::TransactionBatch {
             id: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -86,11 +101,11 @@ impl Storage {
             description: description.to_string(),
             actions,
         };
-        
+
         let undo_service = self.undo_service();
         undo_service.clear_redo_log()?;
         undo_service.push_transaction(&batch)?;
-        
+
         Ok(())
     }
 }

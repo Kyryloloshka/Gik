@@ -1,8 +1,8 @@
-use sha1::{Sha1, Digest};
-use std::io::{self, Write};
+use crate::core::hash::Hash;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use crate::core::hash::Hash;
+use sha1::{Digest, Sha1};
+use std::io::{self, Write};
 
 /// Calculates the SHA1 hash of a commit in Git-canonical format
 pub fn hash_commit(
@@ -84,14 +84,14 @@ mod tests {
     fn test_build_commit_content_single_parent() {
         let tree_hash = Hash([1; 20]);
         let parent = Hash([2; 20]);
-        
+
         let content = build_commit_content(
             tree_hash,
             &[parent],
             "Linus Torvalds",
             "torvalds@linux-foundation.org",
             1718500000,
-            "Initial release"
+            "Initial release",
         );
 
         let expected = format!(
@@ -108,14 +108,14 @@ mod tests {
         let tree_hash = Hash([1; 20]);
         let parent1 = Hash([2; 20]);
         let parent2 = Hash([3; 20]);
-        
+
         let content = build_commit_content(
             tree_hash,
             &[parent1, parent2],
             "John Doe",
             "john@example.com",
             1718500000,
-            "Merge branch 'feature'\n\nCloses #123"
+            "Merge branch 'feature'\n\nCloses #123",
         );
 
         let expected = format!(

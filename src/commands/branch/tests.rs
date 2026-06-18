@@ -1,19 +1,21 @@
 #![allow(clippy::module_inception)]
 #[cfg(test)]
 mod tests {
-    use crate::core::hash::Hash;
     use crate::commands::branch::branch;
     use crate::commands::test_utils::TestEnv;
+    use crate::core::hash::Hash;
     use crate::error::Result;
 
     #[test]
     fn test_branch_create_and_list() -> Result<()> {
         let env = TestEnv::new();
         let storage = &env.storage;
-        
+
         // Create a commit first
-        storage.index().stage_file("test.txt", &Hash([1; 20]), 4, 0, "test".as_bytes())?;
-        
+        storage
+            .index()
+            .stage_file("test.txt", &Hash([1; 20]), 4, 0, "test".as_bytes())?;
+
         let meta = crate::core::models::CommitMeta {
             message: "initial".to_string(),
             author: "test".to_string(),
@@ -22,11 +24,9 @@ mod tests {
             tree_hash: Hash([2; 20]),
         };
         let head_hash = Hash([3; 20]);
-        storage.commits().commit_transaction(
-            head_hash,
-            None,
-            meta,
-        )?;
+        storage
+            .commits()
+            .commit_transaction(head_hash, None, meta)?;
 
         // Create branch
         branch(storage, Some("main".to_string()), false)?;
@@ -48,7 +48,7 @@ mod tests {
 
         let hash = Hash([1; 20]);
         storage.refs().set_ref("feature", &hash)?;
-        
+
         // Delete branch
         branch(storage, Some("feature".to_string()), true)?;
 

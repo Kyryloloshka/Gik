@@ -7,7 +7,9 @@ pub struct Hash(pub [u8; 20]);
 impl Hash {
     pub fn from_hex(s: &str) -> std::result::Result<Self, String> {
         let bytes = hex::decode(s).map_err(|e| e.to_string())?;
-        let array: [u8; 20] = bytes.try_into().map_err(|_| "Invalid hash length".to_string())?;
+        let array: [u8; 20] = bytes
+            .try_into()
+            .map_err(|_| "Invalid hash length".to_string())?;
         Ok(Hash(array))
     }
 }
@@ -42,7 +44,10 @@ mod tests {
 
     #[test]
     fn test_hash_display() {
-        let h = Hash([0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
+        let h = Hash([
+            0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ]);
         assert_eq!(format!("{}", h), "deadbeef00112233445566778899aabbccddeeff");
     }
 

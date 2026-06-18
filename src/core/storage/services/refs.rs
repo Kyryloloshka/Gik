@@ -1,6 +1,6 @@
-use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::storage::repository::*;
+use crate::error::Result;
 use redb::ReadableTable;
 
 pub struct RefService<'a> {

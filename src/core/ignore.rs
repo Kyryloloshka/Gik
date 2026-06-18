@@ -26,7 +26,11 @@ impl IgnoreMatcher {
         let ignore_path = Path::new(crate::config::IGNORE_FILE_NAME);
         if ignore_path.exists() {
             if let Some(err) = builder.add(ignore_path) {
-                eprintln!("Warning: Error parsing {}: {}", crate::config::IGNORE_FILE_NAME, err);
+                eprintln!(
+                    "Warning: Error parsing {}: {}",
+                    crate::config::IGNORE_FILE_NAME,
+                    err
+                );
             }
         }
 
@@ -51,7 +55,7 @@ mod tests {
     #[test]
     fn test_default_ignores() {
         let matcher = IgnoreMatcher::new();
-        
+
         assert!(matcher.is_ignored(".gik/db"));
         assert!(matcher.is_ignored(".gik/objects/12"));
         assert!(matcher.is_ignored(".git"));

@@ -156,7 +156,6 @@ pub enum Commands {
     },
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,7 +184,11 @@ mod tests {
     fn test_parse_commit() {
         let cli = Cli::try_parse_from(["gik", "commit", "-m", "hello"]).unwrap();
         match cli.command {
-            Commands::Commit { message, staged, branch } => {
+            Commands::Commit {
+                message,
+                staged,
+                branch,
+            } => {
                 assert_eq!(message, "hello");
                 assert!(!staged);
                 assert!(branch.is_none());

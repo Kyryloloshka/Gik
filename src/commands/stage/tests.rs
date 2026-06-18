@@ -1,7 +1,7 @@
 use super::*;
 use crate::commands::test_utils::*;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
 
 #[test]
 fn test_stage_adds_file_to_storage() {
@@ -36,14 +36,24 @@ fn test_stage_deletion() {
 
     // 1. Stage normally
     stage(&env.storage, file_path.to_string()).unwrap();
-    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_some());
+    assert!(env
+        .storage
+        .index()
+        .get_staged_hash(file_path)
+        .unwrap()
+        .is_some());
 
     // 2. Delete from disk
     std::fs::remove_file(file_path).unwrap();
 
     // 3. Stage the deletion
     stage(&env.storage, file_path.to_string()).unwrap();
-    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_none());
+    assert!(env
+        .storage
+        .index()
+        .get_staged_hash(file_path)
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -61,7 +71,7 @@ fn test_stage_dot_adds_everything() {
 
     let staged = env.storage.index().get_all_staged_files().unwrap();
     assert_eq!(staged.len(), 3);
-    
+
     let paths: Vec<String> = staged.into_iter().map(|(p, _)| p).collect();
     assert!(paths.contains(&"a.txt".to_string()));
     assert!(paths.contains(&"b.txt".to_string()));

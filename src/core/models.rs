@@ -19,10 +19,24 @@ pub struct IndexEntry {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum UndoAction {
-    UpdateIndex { path: String, old_entry: Option<IndexEntry>, new_entry: Option<IndexEntry> },
-    RevertCommit { old_head: Option<Hash>, new_head: Hash },
-    Checkout { old_head: Option<Hash>, new_head: Hash },
-    MoveBookmark { name: String, old_hash: Option<Hash>, new_hash: Hash },
+    UpdateIndex {
+        path: String,
+        old_entry: Option<IndexEntry>,
+        new_entry: Option<IndexEntry>,
+    },
+    RevertCommit {
+        old_head: Option<Hash>,
+        new_head: Hash,
+    },
+    Checkout {
+        old_head: Option<Hash>,
+        new_head: Hash,
+    },
+    MoveBookmark {
+        name: String,
+        old_hash: Option<Hash>,
+        new_hash: Hash,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -90,7 +104,11 @@ mod tests {
             actions: vec![UndoAction::UpdateIndex {
                 path: "test.txt".to_string(),
                 old_entry: None,
-                new_entry: Some(IndexEntry { hash: Hash([0; 20]), size: 0, mtime: 0 }),
+                new_entry: Some(IndexEntry {
+                    hash: Hash([0; 20]),
+                    size: 0,
+                    mtime: 0,
+                }),
             }],
         };
 

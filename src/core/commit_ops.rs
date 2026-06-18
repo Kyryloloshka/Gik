@@ -1,6 +1,6 @@
-use crate::core::storage::Storage;
-use crate::error::{Result, GikError};
 use crate::core::hash::Hash;
+use crate::core::storage::Storage;
+use crate::error::{GikError, Result};
 
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
@@ -13,7 +13,7 @@ pub fn execute_commit(
     storage: &Storage,
     message: String,
     staged_only: bool,
-    explicit_branch: Option<String>
+    explicit_branch: Option<String>,
 ) -> Result<Option<Hash>> {
     if !staged_only {
         crate::core::workspace::auto_stage(storage)?;
@@ -28,7 +28,8 @@ pub fn execute_commit(
         return Ok(None);
     }
 
-    let (tree_hash, _tree_content) = crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
+    let (tree_hash, _tree_content) =
+        crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
 
     let parent_hash = storage.commits().get_current_head()?;
     let mut parent_hashes = if let Some(p) = parent_hash {
@@ -36,7 +37,7 @@ pub fn execute_commit(
     } else {
         vec![]
     };
-    
+
     if let Some(merge_head) = storage.session().get_merge_head()? {
         parent_hashes.push(merge_head);
         storage.session().clear_merge_head()?;
@@ -47,7 +48,9 @@ pub fn execute_commit(
 
     let (name, email) = match (author_name, author_email) {
         (Some(n), Some(e)) => (n, e),
-        _ => return Err(GikError::Validation("Author identity unknown.
+        _ => {
+            return Err(GikError::Validation(
+                "Author identity unknown.
 
 Please tell me who you are.
 
@@ -57,7 +60,10 @@ Run:
 
 Or import from git:
   gik config --import-git
-".to_string())),
+"
+                .to_string(),
+            ))
+        }
     };
 
     let author = format!("{} <{}>", name, email);
@@ -71,7 +77,7 @@ Or import from git:
         timestamp,
         &message,
     )?;
-    
+
     let mut commit_content = Vec::new();
     crate::core::objects::compress_commit(
         tree_hash,
@@ -91,13 +97,13 @@ Or import from git:
         message: message.clone(),
     };
 
-    storage.objects().write_object(&commit_hash, &commit_content)?;
+    storage
+        .objects()
+        .write_object(&commit_hash, &commit_content)?;
 
-    storage.commits().commit_transaction(
-        commit_hash,
-        parent_hash,
-        meta,
-    )?;
+    storage
+        .commits()
+        .commit_transaction(commit_hash, parent_hash, meta)?;
 
     storage.log_action(crate::core::models::UndoAction::RevertCommit {
         old_head: parent_hash,
@@ -110,30 +116,39 @@ Or import from git:
 }
 
 pub fn resolve_bookmarks(
-    storage: &Storage, 
-    parent_hash: &Option<Hash>, 
-    new_hash: &Hash, 
-    explicit_branch: Option<String>
+    storage: &Storage,
+    parent_hash: &Option<Hash>,
+    new_hash: &Hash,
+    explicit_branch: Option<String>,
 ) -> Result<()> {
     let refs = storage.refs().list_refs()?;
     let session_hint = storage.session().get_current_bookmark()?;
 
     if let Some(b) = explicit_branch {
         let old_hash = storage.refs().set_ref(&b, new_hash)?;
-        storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: b.clone(), old_hash, new_hash: new_hash.clone() });
+        storage.log_action(crate::core::models::UndoAction::MoveBookmark {
+            name: b.clone(),
+            old_hash,
+            new_hash: new_hash.clone(),
+        });
         storage.session().set_current_bookmark(&b)?;
         return Ok(());
     }
 
     if refs.is_empty() {
         let old_hash = storage.refs().set_ref("main", new_hash)?;
-        storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: "main".to_string(), old_hash, new_hash: new_hash.clone() });
+        storage.log_action(crate::core::models::UndoAction::MoveBookmark {
+            name: "main".to_string(),
+            old_hash,
+            new_hash: new_hash.clone(),
+        });
         storage.session().set_current_bookmark("main")?;
         return Ok(());
     }
 
     if let Some(parent) = parent_hash {
-        let parent_refs: Vec<String> = refs.iter()
+        let parent_refs: Vec<String> = refs
+            .iter()
             .filter(|(_, h)| h == parent)
             .map(|(n, _)| n.clone())
             .collect();
@@ -143,13 +158,21 @@ pub fn resolve_bookmarks(
         } else if parent_refs.len() == 1 {
             let name = &parent_refs[0];
             let old_hash = storage.refs().set_ref(name, new_hash)?;
-            storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: name.clone(), old_hash, new_hash: new_hash.clone() });
+            storage.log_action(crate::core::models::UndoAction::MoveBookmark {
+                name: name.clone(),
+                old_hash,
+                new_hash: new_hash.clone(),
+            });
             storage.session().set_current_bookmark(name)?;
         } else {
             if let Some(hint) = session_hint {
                 if parent_refs.contains(&hint) {
                     let old_hash = storage.refs().set_ref(&hint, new_hash)?;
-                    storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: hint.clone(), old_hash, new_hash: new_hash.clone() });
+                    storage.log_action(crate::core::models::UndoAction::MoveBookmark {
+                        name: hint.clone(),
+                        old_hash,
+                        new_hash: new_hash.clone(),
+                    });
                 } else {
                     println!("Warning: Multiple bookmarks found at parent ({}), but none match current session hint ({}). Bookmark left behind.", 
                              parent_refs.join(", "), hint);

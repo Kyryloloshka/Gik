@@ -1,11 +1,10 @@
-use crate::core::storage::Storage;
 use crate::core::hash::Hash;
-use crate::error::Result;
-use crate::core::workspace::get_status;
 use crate::core::models::FileState;
+use crate::core::storage::Storage;
+use crate::core::workspace::get_status;
+use crate::error::Result;
 use colored::*;
 use similar::{ChangeTag, TextDiff};
-
 
 /// Show changes between commits, commit and working tree, etc
 pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
@@ -19,14 +18,17 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
 
         let head_hash = storage.commits().get_current_head()?;
         let head_files = if let Some(h) = head_hash {
-            let meta = storage.commits().get_commit_meta(&h)?
-                .ok_or_else(|| crate::error::GikError::NotFound("Head commit meta not found".to_string()))?;
+            let meta = storage.commits().get_commit_meta(&h)?.ok_or_else(|| {
+                crate::error::GikError::NotFound("Head commit meta not found".to_string())
+            })?;
             crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?
         } else {
             std::collections::HashMap::new()
         };
 
-        let index_files: std::collections::HashMap<String, Hash> = storage.index().get_all_staged_files()?
+        let index_files: std::collections::HashMap<String, Hash> = storage
+            .index()
+            .get_all_staged_files()?
             .into_iter()
             .collect();
 
@@ -59,7 +61,9 @@ pub fn diff(storage: &Storage, staged: bool) -> Result<()> {
             return Ok(());
         }
 
-        let index_files: std::collections::HashMap<String, Hash> = storage.index().get_all_staged_files()?
+        let index_files: std::collections::HashMap<String, Hash> = storage
+            .index()
+            .get_all_staged_files()?
             .into_iter()
             .collect();
 
@@ -102,4 +106,3 @@ fn print_diff(path: &str, old: &str, new: &str) {
 
 #[cfg(test)]
 mod tests;
-

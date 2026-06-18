@@ -1,6 +1,6 @@
 use super::*;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
 
 #[test]
 fn test_undo_works() {
@@ -14,9 +14,19 @@ fn test_undo_works() {
 
     // Undo staging
     crate::commands::stage(&env.storage, file_path.to_string()).unwrap();
-    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_some());
+    assert!(env
+        .storage
+        .index()
+        .get_staged_hash(file_path)
+        .unwrap()
+        .is_some());
     undo(&env.storage, true, false).unwrap();
-    assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_none());
+    assert!(env
+        .storage
+        .index()
+        .get_staged_hash(file_path)
+        .unwrap()
+        .is_none());
 
     // Undo commit
     crate::commands::stage(&env.storage, file_path.to_string()).unwrap();

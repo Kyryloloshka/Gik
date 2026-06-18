@@ -1,6 +1,6 @@
-use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::storage::repository::*;
+use crate::error::Result;
 use redb::ReadableTable;
 
 pub struct CommitService<'a> {
@@ -53,7 +53,11 @@ impl<'a> CommitService<'a> {
         Ok(())
     }
 
-    pub fn insert_commit_meta(&self, hash: &Hash, meta: crate::core::models::CommitMeta) -> Result<()> {
+    pub fn insert_commit_meta(
+        &self,
+        hash: &Hash,
+        meta: crate::core::models::CommitMeta,
+    ) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
             let mut metadata = write_txn.open_table(COMMITS_METADATA)?;

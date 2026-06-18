@@ -1,10 +1,10 @@
-use sha1::{Sha1, Digest};
-use std::io::{self, Write};
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use crate::core::hash::Hash;
 use crate::core::storage::Storage;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
+use std::io::{self, Write};
 
 pub const REGULAR_FILE_MODE: u32 = 0o100644;
 pub const DIRECTORY_MODE: u32 = 0o040000;
@@ -95,7 +95,10 @@ fn build_tree_recursive(
                 continue;
             }
             let remaining_path = parts[1..].join("/");
-            tree_map.entry(dir_name).or_default().push((remaining_path, hash));
+            tree_map
+                .entry(dir_name)
+                .or_default()
+                .push((remaining_path, hash));
         }
     }
 
@@ -120,28 +123,53 @@ pub fn parse_tree(content: &[u8]) -> crate::error::Result<Vec<(u32, String, Hash
     let mut i = 0;
     while i < content.len() {
         // Find space after mode
-        let space_pos = content[i..].iter().position(|&b| b == b' ')
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: missing space"))? + i;
-        let mode_str = std::str::from_utf8(&content[i..space_pos])
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode UTF-8"))?;
-        let mode = u32::from_str_radix(mode_str, 8)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode octal"))?;
-        
+        let space_pos = content[i..]
+            .iter()
+            .position(|&b| b == b' ')
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid tree format: missing space",
+                )
+            })?
+            + i;
+        let mode_str = std::str::from_utf8(&content[i..space_pos]).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode UTF-8")
+        })?;
+        let mode = u32::from_str_radix(mode_str, 8).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid mode octal")
+        })?;
+
         // Find null after name
-        let null_pos = content[space_pos + 1..].iter().position(|&b| b == 0)
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: missing null"))? + space_pos + 1;
+        let null_pos = content[space_pos + 1..]
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid tree format: missing null",
+                )
+            })?
+            + space_pos
+            + 1;
         let name = std::str::from_utf8(&content[space_pos + 1..null_pos])
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid name UTF-8"))?
+            .map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid name UTF-8")
+            })?
             .to_string();
-        
+
         // Read 20 bytes hash
         if null_pos + 1 + 20 > content.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid tree format: truncated hash").into());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid tree format: truncated hash",
+            )
+            .into());
         }
         let mut hash_bytes = [0u8; 20];
         hash_bytes.copy_from_slice(&content[null_pos + 1..null_pos + 1 + 20]);
         let hash = Hash(hash_bytes);
-        
+
         entries.push((mode, name, hash));
         i = null_pos + 1 + 20;
     }
@@ -164,14 +192,19 @@ fn recursive_tree_walk(
     prefix: &str,
     files: &mut HashMap<String, Hash>,
 ) -> crate::error::Result<()> {
-    let obj_data = storage.objects().get_object(tree_hash)?
-        .ok_or_else(|| crate::error::GikError::NotFound(format!("Tree object {} not found", tree_hash)))?;
-    
+    let obj_data = storage.objects().get_object(tree_hash)?.ok_or_else(|| {
+        crate::error::GikError::NotFound(format!("Tree object {} not found", tree_hash))
+    })?;
+
     let (obj_type, _, content) = crate::core::objects::decompress_object(&obj_data[..])?;
     if obj_type != "tree" {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Object {} is not a tree", tree_hash)).into());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Object {} is not a tree", tree_hash),
+        )
+        .into());
     }
-    
+
     let entries = parse_tree(&content)?;
     for (mode, name, hash) in entries {
         let full_path = if prefix.is_empty() {
@@ -179,7 +212,7 @@ fn recursive_tree_walk(
         } else {
             format!("{}/{}", prefix, name)
         };
-        
+
         if mode == DIRECTORY_MODE {
             recursive_tree_walk(storage, &hash, &full_path, files)?;
         } else {

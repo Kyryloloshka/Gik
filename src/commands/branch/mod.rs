@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::core::storage::Storage;
+use crate::error::Result;
 use colored::*;
 
 pub fn branch(storage: &Storage, name: Option<String>, delete: bool) -> Result<()> {
