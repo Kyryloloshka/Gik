@@ -1,6 +1,5 @@
 use crate::core::storage::repository::*;
 use crate::error::Result;
-use redb::ReadableTable;
 
 pub struct SessionService<'a> {
     pub(crate) repo: &'a Repository,

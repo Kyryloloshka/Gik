@@ -1,6 +1,5 @@
 use crate::core::hash::Hash;
 use crate::error::Result;
-use redb::ReadableTable;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};

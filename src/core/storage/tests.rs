@@ -1,7 +1,5 @@
 use super::*;
 use crate::core::hash::Hash;
-use redb::ReadableDatabase;
-use redb::ReadableTable;
 use tempfile::NamedTempFile;
 
 #[test]
