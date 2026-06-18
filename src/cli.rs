@@ -103,7 +103,11 @@ pub enum Commands {
     /// Merge another bookmark or commit into the current branch
     Merge {
         /// The bookmark or commit hash to merge
-        target: String,
+        #[arg(required_unless_present = "continue_merge")]
+        target: Option<String>,
+        /// Continue a merge after resolving conflicts
+        #[arg(long = "continue", id = "continue_merge")]
+        continue_merge: bool,
     },
     /// Push commits to remote repository
     Push,

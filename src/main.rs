@@ -81,8 +81,14 @@ fn run_cli() -> Result<()> {
                 Commands::Branch { name, delete } => {
                     commands::branch::branch(&storage, name, delete)?;
                 }
-                Commands::Merge { target } => {
-                    commands::merge::merge(&storage, &target)?;
+                Commands::Merge { target, continue_merge } => {
+                    if continue_merge {
+                        commands::merge::continue_merge(&storage)?;
+                    } else if let Some(t) = target {
+                        commands::merge::merge(&storage, &t)?;
+                    } else {
+                        return Err(crate::error::GikError::Validation("Must provide target or --continue".into()));
+                    }
                 }
                 Commands::Config { key, value, global, import_git } => {
                     commands::config(&storage, key, value, global, import_git)?;

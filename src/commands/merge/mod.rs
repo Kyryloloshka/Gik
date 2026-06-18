@@ -9,6 +9,7 @@ use crate::core::merge::text::TextMergeStrategy;
 use dialoguer::{Select, theme::ColorfulTheme};
 use std::fs;
 use std::path::Path;
+use similar::TextDiff;
 
 pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     let current_head = storage.commits().get_current_head()?
@@ -67,6 +68,9 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
 
     let text_strategy = TextMergeStrategy;
     let mut conflicts_exist = false;
+    
+    // Set MERGE_HEAD early so if they abort/Ctrl+C, the state is remembered.
+    storage.session().set_merge_head(&full_hash)?;
 
     for (path, action) in actions {
         match action {
@@ -98,13 +102,28 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                     }
                     MergeResult::Conflict { ours, theirs, .. } => {
                         conflicts_exist = true;
-                        println!("Conflict in {}", path);
+                        println!("\nConflict in {}", path);
                         
+                        // Print diff
+                        let ours_str = String::from_utf8_lossy(&ours);
+                        let theirs_str = String::from_utf8_lossy(&theirs);
+                        let diff = TextDiff::from_lines(&ours_str, &theirs_str);
+                        for change in diff.iter_all_changes() {
+                            let sign = match change.tag() {
+                                similar::ChangeTag::Delete => "-",
+                                similar::ChangeTag::Insert => "+",
+                                similar::ChangeTag::Equal => " ",
+                            };
+                            print!("{}{}", sign, change);
+                        }
+                        println!("");
+
                         let selections = &[
                             "Keep Ours", 
                             "Take Theirs", 
                             "Accept Both (Ours + Theirs)", 
                             "Accept Both (Theirs + Ours)", 
+                            "Resolve manually in editor",
                             "Abort Merge"
                         ];
                         
@@ -138,7 +157,27 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                                 write_content_to_disk(&combined, &path)?;
                                 crate::commands::stage::stage(storage, path)?;
                             }
+                            4 => {
+                                let mut combined = Vec::new();
+                                combined.extend_from_slice(b"<<<<<<< HEAD\n");
+                                combined.extend_from_slice(&ours);
+                                if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                                combined.extend_from_slice(b"=======\n");
+                                combined.extend_from_slice(&theirs);
+                                if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
+                                combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
+                                
+                                write_content_to_disk(&combined, &path)?;
+                                
+                                println!("Conflict markers written to {}.", path);
+                                println!("Please open the file in your editor, resolve the conflict, save it, and press Enter to continue...");
+                                let mut input = String::new();
+                                std::io::stdin().read_line(&mut input).unwrap();
+                                
+                                crate::commands::stage::stage(storage, path)?;
+                            }
                             _ => {
+                                storage.session().clear_merge_head()?;
                                 return Err(crate::error::GikError::Aborted("Merge aborted by user".to_string()));
                             }
                         }
@@ -152,10 +191,32 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         println!("All conflicts resolved!");
     }
     
-    storage.session().set_merge_head(&full_hash)?;
-    println!("Merge files staged. Run `gik commit` to finalize the merge.");
+    println!("Merge files staged.");
+
+    crate::commands::commit::commit(
+        storage,
+        format!("Merge {} into {}", target, current_head),
+        false,
+        None,
+    )?;
 
     Ok(())
+}
+
+pub fn continue_merge(storage: &Storage) -> Result<()> {
+    if let Some(merge_head) = storage.session().get_merge_head()? {
+        let current_head = storage.commits().get_current_head()?
+            .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
+        crate::commands::commit::commit(
+            storage,
+            format!("Merge {} into {}", merge_head, current_head),
+            false,
+            None,
+        )?;
+        Ok(())
+    } else {
+        Err(crate::error::GikError::Validation("No merge in progress".to_string()))
+    }
 }
 
 fn get_blob_content(storage: &Storage, hash: &Hash) -> Result<Option<Vec<u8>>> {
