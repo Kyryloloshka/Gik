@@ -75,8 +75,8 @@ fn run_cli() -> Result<()> {
                 } => {
                     commands::commit(&storage, message, staged, branch)?;
                 }
-                Commands::Log { all, json } => {
-                    commands::log(&storage, all, json)?;
+                Commands::Log { all, json, skip, limit } => {
+                    commands::log(&storage, all, json, skip, limit)?;
                 }
                 Commands::Restore { path } => {
                     let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);

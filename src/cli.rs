@@ -47,6 +47,12 @@ pub enum Commands {
         /// Output the log as a JSON array
         #[arg(long)]
         json: bool,
+        /// Number of commits to skip (for pagination)
+        #[arg(long)]
+        skip: Option<usize>,
+        /// Maximum number of commits to return (0 for no limit, default 50)
+        #[arg(short = 'n', long)]
+        limit: Option<usize>,
     },
     /// Restore working tree files
     Restore {

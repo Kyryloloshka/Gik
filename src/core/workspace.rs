@@ -167,16 +167,7 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
         .into_iter()
         .collect();
 
-    let mut builder = WalkBuilder::new(&root);
-    builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
-    builder.hidden(false); // Do not skip hidden files like .env
-
-    builder.filter_entry(move |entry| {
-        let name = entry.file_name().to_string_lossy();
-        name != crate::config::GIK_DIR_NAME
-            && name != crate::config::GIT_DIR_NAME
-            && !name.contains("gik_test")
-    });
+    let builder = build_walker(&root);
 
     for result in builder.build() {
         let entry = match result {
@@ -194,7 +185,11 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
             continue;
         }
 
-        let normalized_path = path_str.replace('\\', "/");
+        let normalized_path = if path_str.contains('\\') {
+            std::borrow::Cow::Owned(path_str.replace('\\', "/"))
+        } else {
+            std::borrow::Cow::Borrowed(path_str)
+        };
         if let Ok(metadata) = entry.metadata() {
             let size = metadata.len();
             let mtime = metadata
@@ -204,18 +199,16 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
                 .unwrap_or(std::time::Duration::from_secs(0))
                 .as_secs();
 
-            // Cache check
-            if let Some(cached) = index_entries.get(&normalized_path) {
+            if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
                 if cached.size == size && cached.mtime == mtime {
-                    disk_files.insert(normalized_path, cached.hash.clone());
+                    disk_files.insert(normalized_path.into_owned(), cached.hash.clone());
                     continue;
                 }
             }
 
-            // Fallback: hash the blob
             if let Ok(file) = std::fs::File::open(path) {
                 if let Ok(hash) = crate::core::objects::hash_blob(file, size) {
-                    disk_files.insert(normalized_path, hash);
+                    disk_files.insert(normalized_path.into_owned(), hash);
                 }
             }
         }
@@ -227,16 +220,7 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
 fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
     let root = std::env::current_dir()?;
 
-    let mut builder = WalkBuilder::new(&root);
-    builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
-    builder.hidden(false);
-
-    builder.filter_entry(move |entry| {
-        let name = entry.file_name().to_string_lossy();
-        name != crate::config::GIK_DIR_NAME
-            && name != crate::config::GIT_DIR_NAME
-            && !name.contains("gik_test")
-    });
+    let builder = build_walker(&root);
 
     for result in builder.build() {
         let entry = match result {
@@ -254,7 +238,11 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
             continue;
         }
 
-        let normalized_path = path_str.replace('\\', "/");
+        let normalized_path = if path_str.contains('\\') {
+            std::borrow::Cow::Owned(path_str.replace('\\', "/"))
+        } else {
+            std::borrow::Cow::Borrowed(path_str)
+        };
         let file = std::fs::File::open(&path)?;
         let meta = file.metadata()?;
         let hash = crate::core::objects::hash_blob(&file, meta.len())?;
@@ -273,7 +261,7 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
                 .stage_file(&normalized_path, &hash, meta.len(), mtime, file)?;
         let new_entry = storage.index().get_staged_entry(&normalized_path)?;
         storage.log_action(crate::core::models::UndoAction::UpdateIndex {
-            path: normalized_path,
+            path: normalized_path.into_owned(),
             old_entry,
             new_entry,
         });
@@ -298,4 +286,19 @@ fn remove_ignored_from_index(storage: &Storage, matcher: &IgnoreMatcher) -> Resu
         }
     }
     Ok(())
+}
+
+fn build_walker(root: &std::path::Path) -> WalkBuilder {
+    let mut builder = WalkBuilder::new(root);
+    builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
+    builder.hidden(false); // Do not skip hidden files like .env
+
+    builder.filter_entry(move |entry| {
+        let name = entry.file_name().to_string_lossy();
+        name != crate::config::GIK_DIR_NAME
+            && name != crate::config::GIT_DIR_NAME
+            && !name.contains("gik_test")
+    });
+
+    builder
 }

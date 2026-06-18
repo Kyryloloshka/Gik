@@ -6,7 +6,7 @@ use colored::*;
 use renderdag::{GraphRenderer, Node, RenderConfig};
 use std::collections::{HashMap, HashSet};
 
-pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
+pub fn log(storage: &Storage, all: bool, json: bool, skip: Option<usize>, limit: Option<usize>) -> Result<()> {
     let head = storage.commits().get_current_head()?;
     let refs = storage.refs().list_refs()?;
 
@@ -81,9 +81,20 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     }
     sorted_commits.reverse(); // Now children come before parents
 
+    let skip_val = skip.unwrap_or(0);
+    let iter = sorted_commits.into_iter().skip(skip_val);
+    
+    let mut selected_commits = Vec::new();
+    let l = limit.unwrap_or(50);
+    if l > 0 {
+        selected_commits.extend(iter.take(l));
+    } else {
+        selected_commits.extend(iter);
+    }
+
     if json {
         let mut json_commits = Vec::new();
-        for (hash, meta) in &sorted_commits {
+        for (hash, meta) in &selected_commits {
             let refs = labels.get(hash).cloned().unwrap_or_default();
             let commit_obj = serde_json::json!({
                 "hash": hash.to_string(),
@@ -100,7 +111,7 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     }
 
     let mut dag_nodes = Vec::new();
-    for (hash, meta) in &sorted_commits {
+    for (hash, meta) in &selected_commits {
         dag_nodes.push(Node::new(
             hash.to_string(),
             meta.parent_hashes.iter().map(|h| h.to_string()).collect(),
@@ -111,7 +122,7 @@ pub fn log(storage: &Storage, all: bool, json: bool) -> Result<()> {
     let actual_glyphs = renderer.render_to_string(&dag_nodes);
     let mut rendered_lines = actual_glyphs.lines();
 
-    for (hash, meta) in sorted_commits {
+    for (hash, meta) in selected_commits {
         let graph_line = rendered_lines.next().unwrap_or("");
         print_commit_graph(hash, meta, &labels, graph_line);
     }
