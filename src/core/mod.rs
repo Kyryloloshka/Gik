@@ -1,5 +1,6 @@
 pub mod clone_ops;
 pub mod commit_ops;
+pub mod fetch_ops;
 pub mod graph;
 pub mod hash;
 pub mod ignore;
@@ -13,6 +14,7 @@ pub mod utils;
 pub mod workspace;
 
 pub use commit_ops::*;
+pub use fetch_ops::*;
 pub use graph::*;
 pub use hash::*;
 pub use ignore::*;

@@ -132,10 +132,20 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
     let pack_name = format!("pack-{}.pack", pack_id);
     let pack_path = pack_dir.join(&pack_name);
 
+    let pb_download = ProgressBar::new_spinner();
+    pb_download.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} [{elapsed_precise}] Downloading packfile... {bytes} ({bytes_per_sec})")
+            .unwrap(),
+    );
+    let mut wrapped_reader = pb_download.wrap_read(reader_in);
+
     let mut file = std::fs::File::create(&pack_path).map_err(|e| GikError::Io(e))?;
     file.write_all(&header).map_err(|e| GikError::Io(e))?;
-    std::io::copy(reader_in, &mut file).map_err(|e| GikError::Io(e))?;
+    std::io::copy(&mut wrapped_reader, &mut file).map_err(|e| GikError::Io(e))?;
     file.sync_all().map_err(|e| GikError::Io(e))?;
+
+    pb_download.finish_with_message("Download completed.");
 
     // 2. Parse and index
     let file = std::fs::File::open(&pack_path).map_err(|e| GikError::Io(e))?;

@@ -20,7 +20,22 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
         }
     }
 
-    let (full_hash, resolved_bookmark) = crate::core::utils::resolve_hash(storage, hash)?;
+    let (full_hash, resolved_bookmark) = match crate::core::utils::resolve_hash(storage, hash) {
+        Ok(res) => res,
+        Err(crate::error::GikError::NotFound(_)) => {
+            println!("'{}' not found locally. Searching on remote...", hash);
+            if let Some(remote_head) = crate::core::fetch_ops::fetch_remote_branch(storage, hash, current_head.as_ref())? {
+                println!("Found on remote. Fetched successfully.");
+                (remote_head, Some(hash.to_string()))
+            } else {
+                return Err(crate::error::GikError::NotFound(format!(
+                    "Object or branch '{}' not found locally or on remote",
+                    hash
+                )));
+            }
+        }
+        Err(e) => return Err(e),
+    };
 
     // 3. Ensure the found hash is a commit
     let meta = storage
