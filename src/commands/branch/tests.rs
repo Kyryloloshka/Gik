@@ -12,7 +12,7 @@ mod tests {
         let storage = &env.storage;
         
         // Create a commit first
-        storage.index().stage_file("test.txt", &Hash([1; 20]), 4, "test".as_bytes())?;
+        storage.index().stage_file("test.txt", &Hash([1; 20]), 4, 0, "test".as_bytes())?;
         
         let meta = crate::core::models::CommitMeta {
             message: "initial".to_string(),

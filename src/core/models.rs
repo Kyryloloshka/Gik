@@ -11,9 +11,16 @@ pub struct CommitMeta {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub struct IndexEntry {
+    pub hash: Hash,
+    pub size: u64,
+    pub mtime: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum UndoAction {
-    Unstage { path: String, old_hash: Option<Hash> },
-    Stage { path: String, hash: Hash },
+    Unstage { path: String, old_entry: Option<IndexEntry> },
+    Stage { path: String, entry: IndexEntry },
     RevertCommit { old_head: Option<Hash>, new_head: Hash },
     Checkout { old_head: Option<Hash>, new_head: Hash },
 }
@@ -65,7 +72,7 @@ mod tests {
             timestamp: 1234567890,
             action: UndoAction::Unstage {
                 path: "test.txt".to_string(),
-                old_hash: None,
+                old_entry: None,
             },
         };
 

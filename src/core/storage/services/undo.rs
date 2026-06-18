@@ -43,17 +43,18 @@ impl<'a> UndoService<'a> {
         let write_txn = self.repo.db.begin_write()?;
         {
             match action {
-                UndoAction::Unstage { path, old_hash } => {
-                    let mut index = write_txn.open_table(STAGE_INDEX)?;
-                    if let Some(hash) = old_hash {
-                        index.insert(path.as_str(), &hash.0)?;
+                UndoAction::Unstage { path, old_entry } => {
+                    let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+                    if let Some(entry) = old_entry {
+                        let encoded = bincode::serialize(&entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                        index.insert(path.as_str(), encoded.as_slice())?;
                     } else {
                         index.remove(path.as_str())?;
                     }
                 }
-                UndoAction::Stage { path, hash } => {
-                    let mut index = write_txn.open_table(STAGE_INDEX)?;
-                    index.insert(path.as_str(), &hash.0)?;
+                UndoAction::Stage { path, entry: _ } => {
+                    let mut index = write_txn.open_table(STAGE_INDEX_V2)?;
+                    index.remove(path.as_str())?;
                 }
                 UndoAction::RevertCommit { old_head, new_head } => {
                     let mut heads = write_txn.open_table(HEADS)?;

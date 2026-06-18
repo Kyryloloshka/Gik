@@ -18,7 +18,7 @@ pub fn auto_stage(storage: &Storage) -> Result<()> {
     remove_ignored_from_index(storage, &matcher)?;
 
     // 3. Remove files from index that have been deleted from disk
-    let disk_files = get_disk_state()?;
+    let disk_files = get_disk_state(storage)?;
     let index_files = storage.index().get_all_staged_files()?;
     for (path, _) in index_files {
         if !disk_files.contains_key(&path) {
@@ -54,7 +54,7 @@ pub fn get_status(storage: &Storage) -> Result<RepoStatus> {
         .into_iter()
         .collect();
 
-    let disk_files = get_disk_state()?;
+    let disk_files = get_disk_state(storage)?;
 
     let mut status = RepoStatus::default();
 
@@ -112,7 +112,7 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
 
     // 3. Clean current disk: remove files that are not in the target tree
-    let disk_files = get_disk_state()?;
+    let disk_files = get_disk_state(storage)?;
     for (path, _) in disk_files {
         if !tree_files.contains_key(&path)
             && std::path::Path::new(&path).exists() {
@@ -142,9 +142,15 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
 
 use ignore::WalkBuilder;
 
-fn get_disk_state() -> Result<HashMap<String, Hash>> {
+fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
     let mut disk_files = HashMap::new();
     let root = std::env::current_dir()?;
+    
+    let index_entries: HashMap<String, crate::core::models::IndexEntry> = storage
+        .index()
+        .get_all_staged_entries()?
+        .into_iter()
+        .collect();
 
     let mut builder = WalkBuilder::new(&root);
     builder.add_custom_ignore_filename(".gik.ignore");
@@ -171,8 +177,24 @@ fn get_disk_state() -> Result<HashMap<String, Hash>> {
         
         let normalized_path = path_str.replace('\\', "/");
         if let Ok(metadata) = entry.metadata() {
+            let size = metadata.len();
+            let mtime = metadata.modified()
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or(std::time::Duration::from_secs(0))
+                .as_secs();
+
+            // Cache check
+            if let Some(cached) = index_entries.get(&normalized_path) {
+                if cached.size == size && cached.mtime == mtime {
+                    disk_files.insert(normalized_path, cached.hash.clone());
+                    continue;
+                }
+            }
+
+            // Fallback: hash the blob
             if let Ok(file) = std::fs::File::open(path) {
-                if let Ok(hash) = crate::core::objects::hash_blob(file, metadata.len()) {
+                if let Ok(hash) = crate::core::objects::hash_blob(file, size) {
                     disk_files.insert(normalized_path, hash);
                 }
             }

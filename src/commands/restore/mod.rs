@@ -28,7 +28,7 @@ pub fn restore(storage: &Storage, path: &str) -> Result<()> {
             // We don't have a partial index update helper yet, let's just use stage logic
             // but we need the raw bytes.
             let bytes = get_blob_bytes(storage, blob_hash)?;
-            storage.index().stage_file(&normalized, blob_hash, bytes.len() as u64, &bytes[..])?;
+            storage.index().stage_file(&normalized, blob_hash, bytes.len() as u64, 0, &bytes[..])?;
         } else {
             // File not in HEAD. If it's in index, unstage it. If it's on disk, maybe delete?
             // Standard Git: git restore <file> error if not in index/HEAD.

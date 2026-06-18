@@ -34,8 +34,14 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
                     crate::core::objects::hash_blob(&file, size)?
                 };
 
+                let mtime = metadata.modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .unwrap_or(std::time::Duration::from_secs(0))
+                    .as_secs();
+
                 let file = File::open(&path)?;
-                storage.index().stage_file(&normalized_path, &hash, metadata.len(), file)?;
+                storage.index().stage_file(&normalized_path, &hash, metadata.len(), mtime, file)?;
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -75,14 +81,18 @@ fn stage_directory(storage: &Storage, dir_path: &str, matcher: &crate::core::ign
             if entry.file_type()?.is_dir() {
                 stack.push(path.to_string_lossy().into_owned());
             } else {
-                let hash = {
-                    let file = File::open(&path)?;
-                    let meta = file.metadata()?;
-                    crate::core::objects::hash_blob(&file, meta.len())?
-                };
                 let file = File::open(&path)?;
                 let meta = file.metadata()?;
-                storage.index().stage_file(&normalized, &hash, meta.len(), file)?;
+                let hash = crate::core::objects::hash_blob(&file, meta.len())?;
+                
+                let mtime = meta.modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .unwrap_or(std::time::Duration::from_secs(0))
+                    .as_secs();
+
+                let file = File::open(&path)?;
+                storage.index().stage_file(&normalized, &hash, meta.len(), mtime, file)?;
             }
         }
     }

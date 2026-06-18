@@ -69,14 +69,7 @@ mod tests {
         checkout::checkout(storage, "main", false).unwrap();
         merge::merge(storage, "feature").unwrap();
         
-        // Verify MERGE_HEAD is set
-        let merge_head = storage.session().get_merge_head().unwrap().unwrap();
-        assert_eq!(merge_head, feature_hash);
-        
-        // Finalize merge
-        commit::commit(storage, "Merge feature into main".to_string(), true, None).unwrap();
-        
-        // Verify MERGE_HEAD is cleared
+        // Verify MERGE_HEAD is cleared (because auto-commit happened)
         assert!(storage.session().get_merge_head().unwrap().is_none());
         
         // Verify multi-parent commit
