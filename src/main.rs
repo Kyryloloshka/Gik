@@ -69,8 +69,15 @@ fn run_cli() -> Result<()> {
                 Commands::Unstage { path } => {
                     commands::unstage(&storage, path)?;
                 }
-                Commands::Status { porcelain } => {
-                    commands::status(&storage, porcelain)?;
+                Commands::Status { porcelain, is_merging } => {
+                    if is_merging {
+                        if storage.session().get_merge_head()?.is_some() {
+                            std::process::exit(0);
+                        } else {
+                            std::process::exit(1);
+                        }
+                    }
+                    commands::status::status(&storage, porcelain)?;
                 }
                 Commands::Diff { staged } => {
                     commands::diff(&storage, staged)?;

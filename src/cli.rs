@@ -72,9 +72,12 @@ pub enum Commands {
     },
     /// Show the working tree status
     Status {
-        /// Give the output in an easy-to-parse format for scripts
+        /// Format output for machine consumption
         #[arg(long)]
         porcelain: bool,
+        /// Check if a merge is in progress (exits with 0 if true, 1 if false)
+        #[arg(long = "is-merging")]
+        is_merging: bool,
     },
     /// Show changes between commits, commit and working tree, etc
     Diff {

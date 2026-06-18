@@ -231,9 +231,21 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     
     println!("Merge files staged.");
 
+    let status = crate::core::workspace::get_status(storage)?;
+    for (path, _) in status.unstaged.iter().chain(status.staged.iter()) {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if content.contains("<<<<<<< HEAD") && content.contains("=======") {
+                println!("Warning: File {} still contains conflict markers.", path);
+                println!("Auto-commit aborted. Please resolve conflicts and run `gik merge --continue`.");
+                return Ok(());
+            }
+        }
+    }
+
+    let current_bookmark = storage.session().get_current_bookmark()?.unwrap_or_else(|| current_head.to_string());
     crate::commands::commit::commit(
         storage,
-        format!("Merge {} into {}", target, current_head),
+        format!("Merge {} into {}", target, current_bookmark),
         false,
         None,
     )?;
@@ -243,11 +255,20 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
 
 pub fn continue_merge(storage: &Storage) -> Result<()> {
     if let Some(merge_head) = storage.session().get_merge_head()? {
+        let status = crate::core::workspace::get_status(storage)?;
+        for (path, _) in status.unstaged.iter().chain(status.staged.iter()) {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if content.contains("<<<<<<< HEAD") && content.contains("=======") {
+                    return Err(crate::error::GikError::Validation(format!("Cannot continue merge. File {} still contains conflict markers.", path)));
+                }
+            }
+        }
         let current_head = storage.commits().get_current_head()?
             .ok_or_else(|| crate::error::GikError::NotFound("No HEAD found".to_string()))?;
+        let current_bookmark = storage.session().get_current_bookmark()?.unwrap_or_else(|| current_head.to_string());
         crate::commands::commit::commit(
             storage,
-            format!("Merge {} into {}", merge_head, current_head),
+            format!("Merge {} into {}", merge_head, current_bookmark),
             false,
             None,
         )?;
