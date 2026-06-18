@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "gik"
-version = "0.3.19"
+version = "0.3.21"
 dependencies = [
  "base64",
  "bincode",
@@ -684,6 +684,7 @@ dependencies = [
  "renderdag",
  "self_update",
  "serde",
+ "serde_json",
  "sha1",
  "similar",
  "tempfile",
