@@ -42,7 +42,7 @@ pub fn build_packfile(storage: &crate::core::storage::Storage, missing: Vec<crat
     let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
     
     for hash in missing {
-        let (obj_type, size, content) = if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
+        if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
             let (author_name, author_email) = if let Some(open) = meta.author.find('<') {
                 if let Some(close) = meta.author.find('>') {
                     (meta.author[..open].trim(), &meta.author[open+1..close])
@@ -61,32 +61,35 @@ pub fn build_packfile(storage: &crate::core::storage::Storage, missing: Vec<crat
                 meta.timestamp,
                 &meta.message,
             ).into_bytes();
-            (1u8, payload.len(), payload)
-        } else if let Some(compressed) = storage.objects().get_object(&hash)? {
-            let (type_str, size, payload) = crate::core::objects::decompress_object(&compressed[..])?;
+            
+            write_object_header(&mut temp_pack, 1u8, payload.len(), &mut dummy_hasher)?;
+            
+            let mut encoder = flate2::write::ZlibEncoder::new(temp_pack, flate2::Compression::default());
+            encoder.write_all(&payload).map_err(|e| crate::error::GikError::Io(e))?;
+            temp_pack = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
+        } else if let Some(file) = storage.objects().get_object_stream(&hash)? {
+            let (type_str, size, mut payload_stream) = crate::core::objects::decompress_object_stream(file)?;
             let type_id = match type_str.as_str() {
                 "tree" => 2u8,
                 "blob" => 3u8,
-                _ => return Err(crate::error::GikError::Validation("Unknown object type in storage".to_string())),
+                _ => return Err(crate::error::GikError::Validation(format!("Unknown object type {}", type_str))),
             };
-            (type_id, size as usize, payload)
+            
+            write_object_header(&mut temp_pack, type_id, size as usize, &mut dummy_hasher)?;
+            
+            let mut encoder = flate2::write::ZlibEncoder::new(temp_pack, flate2::Compression::default());
+            std::io::copy(&mut payload_stream, &mut encoder).map_err(|e| crate::error::GikError::Io(e))?;
+            temp_pack = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
         } else {
             return Err(crate::error::GikError::NotFound(format!("Missing object {}", hash)));
-        };
-        
-        write_object_header(&mut temp_pack, obj_type, size, &mut dummy_hasher)?;
-        
-        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(&content).map_err(|e| crate::error::GikError::Io(e))?;
-        let zlibbed = encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
-        temp_pack.write_all(&zlibbed).map_err(|e| crate::error::GikError::Io(e))?;
+        }
     }
     
     // Compute checksum
     use std::io::{Read, Seek, SeekFrom};
     temp_pack.seek(SeekFrom::Start(0)).map_err(|e| crate::error::GikError::Io(e))?;
     let mut real_hasher = Sha1::new();
-    let mut buffer = [0u8; 8192];
+    let mut buffer = vec![0; crate::config::IO_BUFFER_SIZE];
     loop {
         let n = temp_pack.read(&mut buffer).map_err(|e| crate::error::GikError::Io(e))?;
         if n == 0 { break; }

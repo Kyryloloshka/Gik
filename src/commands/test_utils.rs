@@ -24,7 +24,7 @@ impl TestEnv {
         let dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(dir.path()).unwrap();
-        let storage = setup_test_storage(".gik_test.db");
+        let storage = setup_test_storage(crate::config::DB_PATH);
         Self {
             dir,
             original_dir,

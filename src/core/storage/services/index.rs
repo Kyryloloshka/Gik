@@ -19,13 +19,20 @@ fn deserialize_index_entry(value: &[u8]) -> Result<IndexEntry> {
     }
 }
 
+use crate::core::storage::Storage;
+
 pub struct IndexService<'a> {
-    pub(crate) repo: &'a Repository,
+    pub(crate) storage: &'a Storage,
 }
 
 impl<'a> IndexService<'a> {
     pub fn stage_file<R: Read>(&self, path: &str, hash: &Hash, size: u64, mtime: u64, reader: R) -> Result<()> {
-        let write_txn = self.repo.db.begin_write()?;
+        let exists = self.storage.objects().contains_object(hash)?;
+        if !exists {
+            crate::core::objects::compress_blob(reader, size, hash, self.storage)?;
+        }
+
+        let write_txn = self.storage.repo.db.begin_write()?;
         {
             let old_entry = {
                 let table = write_txn.open_table(STAGE_INDEX)?;
@@ -36,14 +43,6 @@ impl<'a> IndexService<'a> {
                     None
                 }
             };
-
-            let mut objects = write_txn.open_table(OBJECTS)?;
-            let exists = objects.get(&hash.0)?.is_some();
-            if !exists {
-                let mut compressed = Vec::new();
-                crate::core::objects::compress_blob(reader, size, &mut compressed)?;
-                objects.insert(&hash.0, compressed)?;
-            }
 
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let new_entry = IndexEntry { hash: hash.clone(), size, mtime };
@@ -60,7 +59,7 @@ impl<'a> IndexService<'a> {
     }
 
     pub fn unstage_file(&self, path: &str) -> Result<()> {
-        let write_txn = self.repo.db.begin_write()?;
+        let write_txn = self.storage.repo.db.begin_write()?;
         {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let entry: Option<IndexEntry> = {
@@ -85,7 +84,7 @@ impl<'a> IndexService<'a> {
 
     pub fn get_staged_entry(&self, path: &str) -> Result<Option<IndexEntry>> {
         let entry = {
-            let read_txn = self.repo.db.begin_read()?;
+            let read_txn = self.storage.repo.db.begin_read()?;
             let table = read_txn.open_table(STAGE_INDEX)?;
             let guard_opt = table.get(path)?;
             if let Some(guard) = guard_opt {
@@ -102,7 +101,7 @@ impl<'a> IndexService<'a> {
     }
 
     pub fn set_staged_entry(&self, path: &str, entry: &IndexEntry) -> Result<()> {
-        let write_txn = self.repo.db.begin_write()?;
+        let write_txn = self.storage.repo.db.begin_write()?;
         {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let encoded = bincode::serialize(entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
@@ -118,7 +117,7 @@ impl<'a> IndexService<'a> {
     }
 
     pub fn get_all_staged_entries(&self) -> Result<Vec<(String, IndexEntry)>> {
-        let read_txn = self.repo.db.begin_read()?;
+        let read_txn = self.storage.repo.db.begin_read()?;
         let table = read_txn.open_table(STAGE_INDEX)?;
         let mut entries = Vec::new();
         for result in table.iter()? {
@@ -135,7 +134,7 @@ impl<'a> IndexService<'a> {
     }
 
     pub fn set_index_state(&self, files: &HashMap<String, Hash>) -> Result<()> {
-        let write_txn = self.repo.db.begin_write()?;
+        let write_txn = self.storage.repo.db.begin_write()?;
         {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let mut keys = Vec::new();

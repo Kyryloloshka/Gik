@@ -81,7 +81,7 @@ fn test_ignore_system_removes_from_index() {
 
     // 2. Add to .gik.ignore
     {
-        let mut ignore_file = File::create(".gik.ignore").unwrap();
+        let mut ignore_file = File::create(crate::config::IGNORE_FILE_NAME).unwrap();
         ignore_file.write_all(b"ignored_file.txt\n").unwrap();
     }
 

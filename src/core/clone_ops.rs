@@ -87,8 +87,8 @@ pub fn extract_repo_name(url: &str) -> Result<String> {
     let url_trimmed = url.trim_end_matches('/');
     if let Some(last_slash) = url_trimmed.rfind('/') {
         let mut name = &url_trimmed[last_slash + 1..];
-        if name.ends_with(".git") {
-            name = &name[..name.len() - 4];
+        if name.ends_with(crate::config::GIT_DIR_NAME) {
+            name = name.strip_suffix(crate::config::GIT_DIR_NAME).unwrap();
         }
         if !name.is_empty() {
             return Ok(name.to_string());

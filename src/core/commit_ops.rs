@@ -28,7 +28,7 @@ pub fn execute_commit(
         return Ok(None);
     }
 
-    let (tree_hash, tree_content) = crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
+    let (tree_hash, _tree_content) = crate::core::objects::tree::build_and_store_tree(storage, staged_files)?;
 
     let parent_hash = storage.commits().get_current_head()?;
     let mut parent_hashes = if let Some(p) = parent_hash {
@@ -91,11 +91,10 @@ Or import from git:
         message: message.clone(),
     };
 
+    storage.objects().write_object(&commit_hash, &commit_content)?;
+
     storage.commits().commit_transaction(
-        tree_hash,
-        tree_content,
         commit_hash,
-        commit_content,
         parent_hash,
         meta,
     )?;

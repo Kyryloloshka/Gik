@@ -9,7 +9,6 @@ fn test_storage_init() {
     let storage = Storage::new(tmp_file.path()).unwrap();
 
     let read_txn = storage.repo.db.begin_read().unwrap();
-    assert!(read_txn.open_table(OBJECTS).is_ok());
     assert!(read_txn.open_table(COMMITS_METADATA).is_ok());
     assert!(read_txn.open_table(HEADS).is_ok());
     assert!(read_txn.open_table(STAGE_INDEX).is_ok());
@@ -42,8 +41,7 @@ fn test_storage_stage_file() {
     let entry: crate::core::models::IndexEntry = bincode::deserialize(staged_guard.value()).unwrap();
     assert_eq!(entry.hash.0, hash.0);
 
-    // Verify OBJECTS
-    let objects = read_txn.open_table(OBJECTS).unwrap();
-    assert!(objects.get(&hash.0).unwrap().is_some());
+    // Verify Filesystem Object
+    assert!(storage.objects().contains_object(&hash).unwrap());
 }
 

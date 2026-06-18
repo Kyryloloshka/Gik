@@ -29,7 +29,7 @@ pub fn auto_stage(storage: &Storage) -> Result<()> {
     Ok(())
 }
 
-/// Only removes files from the index that are now ignored according to .gik.ignore.
+/// Only removes files from the index that are now ignored according to ignore rules.
 pub fn clean_ignored_from_index(storage: &Storage) -> Result<()> {
     let matcher = IgnoreMatcher::new();
     remove_ignored_from_index(storage, &matcher)
@@ -153,12 +153,12 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
         .collect();
 
     let mut builder = WalkBuilder::new(&root);
-    builder.add_custom_ignore_filename(".gik.ignore");
+    builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
     builder.hidden(false); // Do not skip hidden files like .env
     
     builder.filter_entry(move |entry| {
         let name = entry.file_name().to_string_lossy();
-        name != crate::config::DB_PATH && name != ".git" && !name.contains("gik_test")
+        name != crate::config::GIK_DIR_NAME && name != crate::config::GIT_DIR_NAME && !name.contains("gik_test")
     });
 
     for result in builder.build() {
@@ -208,12 +208,12 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
     let root = std::env::current_dir()?;
 
     let mut builder = WalkBuilder::new(&root);
-    builder.add_custom_ignore_filename(".gik.ignore");
+    builder.add_custom_ignore_filename(crate::config::IGNORE_FILE_NAME);
     builder.hidden(false);
     
     builder.filter_entry(move |entry| {
         let name = entry.file_name().to_string_lossy();
-        name != crate::config::DB_PATH && name != ".git" && !name.contains("gik_test")
+        name != crate::config::GIK_DIR_NAME && name != crate::config::GIT_DIR_NAME && !name.contains("gik_test")
     });
 
     for result in builder.build() {

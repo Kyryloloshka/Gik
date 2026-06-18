@@ -9,21 +9,30 @@ use self::services::undo::UndoService;
 use self::services::object::ObjectService;
 use self::services::refs::RefService;
 use self::services::config::ConfigService;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct Storage {
     pub(crate) repo: Repository,
+    pub(crate) objects_dir: PathBuf,
 }
 
 impl Storage {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let repo = Repository::new(path)?;
-        Ok(Self { repo })
+        let parent = path.as_ref().parent().unwrap_or(Path::new("."));
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| crate::error::GikError::Io(e))?;
+        }
+        let objects_dir = parent.join(crate::config::OBJECTS_DIR_NAME);
+        if !objects_dir.exists() {
+            std::fs::create_dir_all(&objects_dir).map_err(|e| crate::error::GikError::Io(e))?;
+        }
+        let repo = Repository::new(path.as_ref())?;
+        Ok(Self { repo, objects_dir })
     }
 
     // Services accessors
     pub fn index(&self) -> IndexService<'_> {
-        IndexService { repo: &self.repo }
+        IndexService { storage: self }
     }
 
     pub fn commits(&self) -> CommitService<'_> {
@@ -35,7 +44,7 @@ impl Storage {
     }
 
     pub fn objects(&self) -> ObjectService<'_> {
-        ObjectService { repo: &self.repo }
+        ObjectService { objects_dir: &self.objects_dir }
     }
 
     pub fn refs(&self) -> RefService<'_> {

@@ -1,7 +1,5 @@
 use sha1::{Sha1, Digest};
-use std::io::{self, Read, Write};
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
+use std::io::{self, Read};
 use crate::core::hash::Hash;
 
 /// Calculates the SHA1 hash of a blob in Git-canonical format: "blob [size]\0[content]"
@@ -13,7 +11,7 @@ pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<Hash> {
     hasher.update(header.as_bytes());
 
     // Stream content
-    let mut buffer = [0u8; 8192];
+    let mut buffer = vec![0; crate::config::IO_BUFFER_SIZE];
     loop {
         let n = reader.read(&mut buffer)?;
         if n == 0 { break; }
@@ -26,17 +24,17 @@ pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<Hash> {
     Ok(Hash(hash))
 }
 
-/// Compresses a blob (including its Git header) using Zlib streaming compression
-pub fn compress_blob<R: Read, W: Write>(mut reader: R, size: u64, writer: W) -> io::Result<()> {
-    let mut encoder = ZlibEncoder::new(writer, Compression::default());
-
-    // Write header
-    let header = format!("blob {}\0", size);
-    encoder.write_all(header.as_bytes())?;
-
-    // Stream content
-    io::copy(&mut reader, &mut encoder)?;
-
-    encoder.finish()?;
-    Ok(())
+/// Compresses a blob (including its Git header) using Zlib streaming compression directly into Storage
+pub fn compress_blob<R: std::io::Read>(mut reader: R, size: u64, hash: &Hash, storage: &crate::core::storage::Storage) -> crate::error::Result<()> {
+    storage.objects().write_object_with_writer(hash, |file| {
+        let mut encoder = flate2::write::ZlibEncoder::new(file, flate2::Compression::default());
+        
+        let header = format!("blob {}\0", size);
+        std::io::Write::write_all(&mut encoder, header.as_bytes()).map_err(|e| crate::error::GikError::Io(e))?;
+        
+        std::io::copy(&mut reader, &mut encoder).map_err(|e| crate::error::GikError::Io(e))?;
+        
+        encoder.finish().map_err(|e| crate::error::GikError::Io(e))?;
+        Ok(())
+    })
 }

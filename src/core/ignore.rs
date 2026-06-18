@@ -16,18 +16,17 @@ impl IgnoreMatcher {
         let mut builder = GitignoreBuilder::new("");
 
         // Hardcoded defaults
-        let _ = builder.add_line(None, crate::config::DB_PATH);
-        let db_glob = format!("{}/**", crate::config::DB_PATH);
-        let _ = builder.add_line(None, &db_glob);
-        let _ = builder.add_line(None, ".git");
-        let _ = builder.add_line(None, ".git/**");
+        let _ = builder.add_line(None, crate::config::GIK_DIR_NAME);
+        let _ = builder.add_line(None, &format!("{}/**", crate::config::GIK_DIR_NAME));
+        let _ = builder.add_line(None, crate::config::GIT_DIR_NAME);
+        let _ = builder.add_line(None, &format!("{}/**", crate::config::GIT_DIR_NAME));
         let _ = builder.add_line(None, "*gik_test*");
 
         // Load from .gik.ignore
-        let ignore_path = Path::new(".gik.ignore");
+        let ignore_path = Path::new(crate::config::IGNORE_FILE_NAME);
         if ignore_path.exists() {
             if let Some(err) = builder.add(ignore_path) {
-                eprintln!("Warning: Error parsing .gik.ignore: {}", err);
+                eprintln!("Warning: Error parsing {}: {}", crate::config::IGNORE_FILE_NAME, err);
             }
         }
 
@@ -53,7 +52,8 @@ mod tests {
     fn test_default_ignores() {
         let matcher = IgnoreMatcher::new();
         
-        assert!(matcher.is_ignored(".gik.db"));
+        assert!(matcher.is_ignored(".gik/db"));
+        assert!(matcher.is_ignored(".gik/objects/12"));
         assert!(matcher.is_ignored(".git"));
         assert!(matcher.is_ignored(".git/config"));
         assert!(!matcher.is_ignored("README.md"));
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn test_custom_ignore_file() {
         let dir = tempdir().unwrap();
-        let ignore_path = dir.path().join(".gik.ignore");
+        let ignore_path = dir.path().join(crate::config::IGNORE_FILE_NAME);
         {
             let mut file = fs::File::create(&ignore_path).unwrap();
             file.write_all(b"target\n*.tmp\n# comment\n\n").unwrap();

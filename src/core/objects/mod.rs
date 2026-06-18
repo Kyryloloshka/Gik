@@ -36,5 +36,46 @@ pub fn decompress_object<R: Read>(reader: R) -> io::Result<(String, u64, Vec<u8>
     Ok((obj_type, size, actual_content))
 }
 
+pub struct ObjectPayloadReader<R: Read> {
+    decoder: ZlibDecoder<R>,
+}
+
+impl<R: Read> Read for ObjectPayloadReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.decoder.read(buf)
+    }
+}
+
+pub fn decompress_object_stream<R: Read>(reader: R) -> io::Result<(String, u64, ObjectPayloadReader<R>)> {
+    let mut decoder = ZlibDecoder::new(reader);
+    let mut header_buf = Vec::new();
+    let mut byte = [0u8; 1];
+    
+    loop {
+        let n = decoder.read(&mut byte)?;
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF while reading header"));
+        }
+        if byte[0] == 0 {
+            break;
+        }
+        header_buf.push(byte[0]);
+    }
+    
+    let header_str = std::str::from_utf8(&header_buf)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-8 in header"))?;
+    
+    let parts: Vec<&str> = header_str.split_whitespace().collect();
+    if parts.len() != 2 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid header format"));
+    }
+
+    let obj_type = parts[0].to_string();
+    let size = parts[1].parse::<u64>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid size in header"))?;
+
+    Ok((obj_type, size, ObjectPayloadReader { decoder }))
+}
+
 #[cfg(test)]
 mod tests;

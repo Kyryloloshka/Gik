@@ -34,19 +34,12 @@ impl<'a> CommitService<'a> {
 
     pub fn commit_transaction(
         &self,
-        tree_hash: Hash,
-        tree_content: Vec<u8>,
         commit_hash: Hash,
-        commit_content: Vec<u8>,
         parent_hash: Option<Hash>,
         meta: crate::core::models::CommitMeta,
     ) -> Result<()> {
         let write_txn = self.repo.db.begin_write()?;
         {
-            let mut objects = write_txn.open_table(OBJECTS)?;
-            objects.insert(&tree_hash.0, tree_content)?;
-            objects.insert(&commit_hash.0, commit_content)?;
-
             let mut metadata = write_txn.open_table(COMMITS_METADATA)?;
             let meta_bytes = bincode::serialize(&meta)?;
             metadata.insert(&commit_hash.0, meta_bytes)?;

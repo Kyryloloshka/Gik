@@ -55,17 +55,12 @@ pub fn build_and_store_tree(
     let mut trees_to_store = Vec::new();
     let (root_hash, root_content) = build_tree_recursive(staged_files, &mut trees_to_store)?;
 
-    // Store all trees in a single transaction
-    let write_txn = storage.repo.db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(crate::core::storage::repository::OBJECTS)?;
-        for (hash, content) in trees_to_store {
-            table.insert(&hash.0, content)?;
-        }
-        // Also insert the root tree
-        table.insert(&root_hash.0, root_content.clone())?;
+    // Store all trees
+    for (hash, content) in trees_to_store {
+        storage.objects().write_object(&hash, &content)?;
     }
-    write_txn.commit()?;
+    // Also insert the root tree
+    storage.objects().write_object(&root_hash, &root_content)?;
 
     Ok((root_hash, root_content))
 }

@@ -1,7 +1,5 @@
 use super::*;
 use std::io::Cursor;
-use flate2::read::ZlibDecoder;
-use std::io::Read;
 
 #[test]
 fn test_hash_blob_hello_world() {
@@ -28,19 +26,25 @@ fn test_hash_blob_git_reference() {
 
 #[test]
 fn test_compress_decompress_blob() {
-    let content = "test content for compression";
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let storage = crate::core::storage::Storage::new(tmp_dir.path().join("db")).unwrap();
+
+    let content = b"hello test blob compression";
     let size = content.len() as u64;
-    let reader = Cursor::new(content);
-    let mut compressed = Vec::new();
+    let reader = &content[..];
 
-    compress_blob(reader, size, &mut compressed).unwrap();
+    // Compute hash
+    let hash = hash_blob(&content[..], size).unwrap();
 
-    let mut decoder = ZlibDecoder::new(&compressed[..]);
-    let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed).unwrap();
+    // Compress using new streaming interface directly to storage
+    compress_blob(reader, size, &hash, &storage).unwrap();
 
-    let expected = format!("blob {}\0{}", size, content);
-    assert_eq!(decompressed, expected);
+    // Decompress
+    let (obj_type, de_size, actual_content) = decompress_object(&storage.objects().get_object(&hash).unwrap().unwrap()[..]).unwrap();
+
+    assert_eq!(obj_type, "blob");
+    assert_eq!(de_size, size);
+    assert_eq!(actual_content, content);
 }
 
 #[test]

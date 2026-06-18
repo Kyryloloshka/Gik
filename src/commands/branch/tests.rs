@@ -23,10 +23,7 @@ mod tests {
         };
         let head_hash = Hash([3; 20]);
         storage.commits().commit_transaction(
-            Hash([2; 20]),
-            vec![],
             head_hash,
-            vec![],
             None,
             meta,
         )?;

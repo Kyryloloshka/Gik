@@ -10,7 +10,7 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
     let matcher = crate::core::ignore::IgnoreMatcher::new();
     let normalized_path = path.replace('\\', "/");
     if matcher.is_ignored(&normalized_path) {
-        println!("Path '{}' is ignored by .gik.ignore", path);
+        println!("Path '{}' is ignored by {}", path, crate::config::IGNORE_FILE_NAME);
         return Ok(());
     }
 
