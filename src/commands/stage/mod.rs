@@ -41,14 +41,27 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
                     .as_secs();
 
                 let file = File::open(&path)?;
-                storage.index().stage_file(&normalized_path, &hash, metadata.len(), mtime, file)?;
+                let old_entry = storage.index().stage_file(&normalized_path, &hash, metadata.len(), mtime, file)?;
+                let new_entry = storage.index().get_staged_entry(&normalized_path)?;
+                storage.log_action(crate::core::models::UndoAction::UpdateIndex {
+                    path: normalized_path,
+                    old_entry,
+                    new_entry,
+                });
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Path not found on disk. Check if it's in the index to stage deletion.
             if storage.index().get_staged_hash(&normalized_path)?.is_some() {
                 println!("Staging deletion: {}", normalized_path);
-                storage.index().unstage_file(&normalized_path)?;
+                let old_entry = storage.index().unstage_file(&normalized_path)?;
+                if let Some(_e) = old_entry.clone() {
+                    storage.log_action(crate::core::models::UndoAction::UpdateIndex {
+                        path: normalized_path,
+                        old_entry,
+                        new_entry: None,
+                    });
+                }
             } else {
                 return Err(crate::error::GikError::NotFound(format!("pathspec '{}' did not match any files", path)));
             }
@@ -56,6 +69,7 @@ pub fn stage(storage: &Storage, path: String) -> Result<()> {
         Err(e) => return Err(e.into()),
     }
 
+    storage.commit_batch(crate::core::models::CommandType::Stage, &format!("gik stage {}", path))?;
     Ok(())
 }
 

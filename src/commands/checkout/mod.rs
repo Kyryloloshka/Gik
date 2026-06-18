@@ -39,11 +39,12 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     }
 
     // 7. Log transaction for undo
-    storage.log_transaction_manual(crate::core::models::UndoAction::Checkout {
+    storage.log_action(crate::core::models::UndoAction::Checkout {
         old_head: current_head,
-        new_head: full_hash,
-    })?;
+        new_head: full_hash.clone(),
+    });
 
     println!("Switched to commit {}", full_hash);
+    storage.commit_batch(crate::core::models::CommandType::Checkout, &format!("gik checkout {}", hash))?;
     Ok(())
 }

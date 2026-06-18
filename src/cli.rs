@@ -50,8 +50,24 @@ pub enum Commands {
         /// Path to restore (use '.' for everything)
         path: String,
     },
-    /// Undo the last commit
-    Undo,
+    /// Undo the last transaction
+    Undo {
+        /// Skip confirmation
+        #[arg(long, short = 'y')]
+        yes: bool,
+        /// List transactions available to undo
+        #[arg(long)]
+        list: bool,
+    },
+    /// Redo the last undone transaction
+    Redo {
+        /// Skip confirmation
+        #[arg(long, short = 'y')]
+        yes: bool,
+        /// List transactions available to redo
+        #[arg(long)]
+        list: bool,
+    },
     /// Manage Gik configuration
     Config {
         /// The config key to get or set

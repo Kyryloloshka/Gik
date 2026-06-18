@@ -99,6 +99,11 @@ Or import from git:
         meta,
     )?;
 
+    storage.log_action(crate::core::models::UndoAction::RevertCommit {
+        old_head: parent_hash,
+        new_head: commit_hash,
+    });
+
     resolve_bookmarks(storage, &parent_hash, &commit_hash, explicit_branch)?;
 
     Ok(Some(commit_hash))
@@ -114,13 +119,15 @@ pub fn resolve_bookmarks(
     let session_hint = storage.session().get_current_bookmark()?;
 
     if let Some(b) = explicit_branch {
-        storage.refs().set_ref(&b, new_hash)?;
+        let old_hash = storage.refs().set_ref(&b, new_hash)?;
+        storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: b.clone(), old_hash, new_hash: new_hash.clone() });
         storage.session().set_current_bookmark(&b)?;
         return Ok(());
     }
 
     if refs.is_empty() {
-        storage.refs().set_ref("main", new_hash)?;
+        let old_hash = storage.refs().set_ref("main", new_hash)?;
+        storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: "main".to_string(), old_hash, new_hash: new_hash.clone() });
         storage.session().set_current_bookmark("main")?;
         return Ok(());
     }
@@ -135,12 +142,14 @@ pub fn resolve_bookmarks(
             storage.session().clear_current_bookmark()?;
         } else if parent_refs.len() == 1 {
             let name = &parent_refs[0];
-            storage.refs().set_ref(name, new_hash)?;
+            let old_hash = storage.refs().set_ref(name, new_hash)?;
+            storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: name.clone(), old_hash, new_hash: new_hash.clone() });
             storage.session().set_current_bookmark(name)?;
         } else {
             if let Some(hint) = session_hint {
                 if parent_refs.contains(&hint) {
-                    storage.refs().set_ref(&hint, new_hash)?;
+                    let old_hash = storage.refs().set_ref(&hint, new_hash)?;
+                    storage.log_action(crate::core::models::UndoAction::MoveBookmark { name: hint.clone(), old_hash, new_hash: new_hash.clone() });
                 } else {
                     println!("Warning: Multiple bookmarks found at parent ({}), but none match current session hint ({}). Bookmark left behind.", 
                              parent_refs.join(", "), hint);

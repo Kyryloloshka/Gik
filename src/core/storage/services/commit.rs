@@ -1,7 +1,6 @@
 use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::storage::repository::*;
-use crate::core::storage::services::log_transaction;
 use redb::ReadableTable;
 
 pub struct CommitService<'a> {
@@ -49,11 +48,6 @@ impl<'a> CommitService<'a> {
                 heads.remove(&parent.0)?;
             }
             heads.insert(&commit_hash.0, 1)?;
-
-            log_transaction(&write_txn, crate::core::models::UndoAction::RevertCommit {
-                old_head: parent_hash,
-                new_head: commit_hash,
-            })?;
         }
         write_txn.commit()?;
         Ok(())

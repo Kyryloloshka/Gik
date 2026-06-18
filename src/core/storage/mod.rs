@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 pub struct Storage {
     pub(crate) repo: Repository,
     pub(crate) objects_dir: PathBuf,
+    pub(crate) pending_actions: std::cell::RefCell<Vec<crate::core::models::UndoAction>>,
 }
 
 impl Storage {
@@ -27,7 +28,11 @@ impl Storage {
             std::fs::create_dir_all(&objects_dir).map_err(|e| crate::error::GikError::Io(e))?;
         }
         let repo = Repository::new(path.as_ref())?;
-        Ok(Self { repo, objects_dir })
+        Ok(Self { 
+            repo, 
+            objects_dir,
+            pending_actions: std::cell::RefCell::new(Vec::new()),
+        })
     }
 
     // Services accessors
@@ -59,14 +64,33 @@ impl Storage {
         ConfigService { repo: &self.repo }
     }
 
-    pub fn log_transaction_manual(&self, action: crate::core::models::UndoAction) -> Result<()> {
-        let write_txn = self.repo.db.begin_write()?;
-        crate::core::storage::services::log_transaction(&write_txn, action)?;
-        write_txn.commit()?;
+    pub fn log_action(&self, action: crate::core::models::UndoAction) {
+        self.pending_actions.borrow_mut().push(action);
+    }
+
+    pub fn commit_batch(&self, command: crate::core::models::CommandType, description: &str) -> Result<()> {
+        let actions = self.pending_actions.replace(Vec::new());
+        if actions.is_empty() {
+            return Ok(()); // Nothing to log
+        }
+        
+        let batch = crate::core::models::TransactionBatch {
+            id: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            command,
+            description: description.to_string(),
+            actions,
+        };
+        
+        let undo_service = self.undo_service();
+        undo_service.clear_redo_log()?;
+        undo_service.push_transaction(&batch)?;
+        
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests;

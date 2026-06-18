@@ -2,7 +2,6 @@ use crate::error::Result;
 use crate::core::hash::Hash;
 use crate::core::models::IndexEntry;
 use crate::core::storage::repository::*;
-use crate::core::storage::services::log_transaction;
 use redb::ReadableTable;
 use std::io::Read;
 use std::collections::HashMap;
@@ -26,14 +25,14 @@ pub struct IndexService<'a> {
 }
 
 impl<'a> IndexService<'a> {
-    pub fn stage_file<R: Read>(&self, path: &str, hash: &Hash, size: u64, mtime: u64, reader: R) -> Result<()> {
+    pub fn stage_file<R: Read>(&self, path: &str, hash: &Hash, size: u64, mtime: u64, reader: R) -> Result<Option<IndexEntry>> {
         let exists = self.storage.objects().contains_object(hash)?;
         if !exists {
             crate::core::objects::compress_blob(reader, size, hash, self.storage)?;
         }
 
         let write_txn = self.storage.repo.db.begin_write()?;
-        {
+        let result = {
             let old_entry = {
                 let table = write_txn.open_table(STAGE_INDEX)?;
                 let guard = table.get(path)?;
@@ -49,18 +48,15 @@ impl<'a> IndexService<'a> {
             let encoded = bincode::serialize(&new_entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             index.insert(path, encoded.as_slice())?;
 
-            log_transaction(&write_txn, crate::core::models::UndoAction::Unstage {
-                path: path.to_string(),
-                old_entry,
-            })?;
-        }
+            Ok(old_entry)
+        };
         write_txn.commit()?;
-        Ok(())
+        result
     }
 
-    pub fn unstage_file(&self, path: &str) -> Result<()> {
+    pub fn unstage_file(&self, path: &str) -> Result<Option<IndexEntry>> {
         let write_txn = self.storage.repo.db.begin_write()?;
-        {
+        let result = {
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let entry: Option<IndexEntry> = {
                 if let Some(guard) = index.get(path)? {
@@ -70,16 +66,13 @@ impl<'a> IndexService<'a> {
                 }
             };
 
-            if let Some(e) = entry {
+            if let Some(_e) = entry.clone() {
                 index.remove(path)?;
-                log_transaction(&write_txn, crate::core::models::UndoAction::Stage {
-                    path: path.to_string(),
-                    entry: e,
-                })?;
             }
-        }
+            Ok(entry)
+        };
         write_txn.commit()?;
-        Ok(())
+        result
     }
 
     pub fn get_staged_entry(&self, path: &str) -> Result<Option<IndexEntry>> {
@@ -100,18 +93,28 @@ impl<'a> IndexService<'a> {
         Ok(self.get_staged_entry(path)?.map(|e| e.hash))
     }
 
-    pub fn set_staged_entry(&self, path: &str, entry: &IndexEntry) -> Result<()> {
+    pub fn set_staged_entry(&self, path: &str, entry: &IndexEntry) -> Result<Option<IndexEntry>> {
         let write_txn = self.storage.repo.db.begin_write()?;
-        {
+        let result = {
+            let old_entry = {
+                let table = write_txn.open_table(STAGE_INDEX)?;
+                let guard = table.get(path)?;
+                if let Some(g) = guard {
+                    Some(deserialize_index_entry(g.value())?)
+                } else {
+                    None
+                }
+            };
             let mut index = write_txn.open_table(STAGE_INDEX)?;
             let encoded = bincode::serialize(entry).map_err(|e| crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             index.insert(path, encoded.as_slice())?;
-        }
+            Ok(old_entry)
+        };
         write_txn.commit()?;
-        Ok(())
+        result
     }
 
-    pub fn set_staged_hash(&self, path: &str, hash: &Hash) -> Result<()> {
+    pub fn set_staged_hash(&self, path: &str, hash: &Hash) -> Result<Option<IndexEntry>> {
         let entry = IndexEntry { hash: hash.clone(), size: 0, mtime: 0 };
         self.set_staged_entry(path, &entry)
     }

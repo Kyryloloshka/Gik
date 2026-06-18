@@ -8,14 +8,16 @@ pub struct RefService<'a> {
 }
 
 impl<'a> RefService<'a> {
-    pub fn set_ref(&self, name: &str, hash: &Hash) -> Result<()> {
+    pub fn set_ref(&self, name: &str, hash: &Hash) -> Result<Option<Hash>> {
         let write_txn = self.repo.db.begin_write()?;
-        {
+        let old_hash = {
             let mut table = write_txn.open_table(REFS)?;
+            let old = table.get(name)?.map(|g| Hash(*g.value()));
             table.insert(name, &hash.0)?;
-        }
+            old
+        };
         write_txn.commit()?;
-        Ok(())
+        Ok(old_hash)
     }
 
     pub fn get_ref(&self, name: &str) -> Result<Option<Hash>> {

@@ -65,8 +65,11 @@ fn run_cli() -> Result<()> {
                     let resolved_path = crate::core::utils::resolve_path(&cwd, &repo_root, &path);
                     commands::restore(&storage, &resolved_path)?;
                 }
-                Commands::Undo => {
-                    commands::undo(&storage)?;
+                Commands::Undo { yes, list } => {
+                    commands::undo(&storage, yes, list)?;
+                }
+                Commands::Redo { yes, list } => {
+                    commands::redo(&storage, yes, list)?;
                 }
                 Commands::Unstage { path } => {
                     commands::unstage(&storage, path)?;

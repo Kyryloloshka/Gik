@@ -22,9 +22,19 @@ pub fn auto_stage(storage: &Storage) -> Result<()> {
     let index_files = storage.index().get_all_staged_files()?;
     for (path, _) in index_files {
         if !disk_files.contains_key(&path) {
-            storage.index().unstage_file(&path)?;
+            let old_entry = storage.index().unstage_file(&path)?;
+            if let Some(_e) = old_entry.clone() {
+                storage.log_action(crate::core::models::UndoAction::UpdateIndex {
+                    path: path.clone(),
+                    old_entry,
+                    new_entry: None,
+                });
+            }
         }
     }
+
+    // 4. Commit transaction batch
+    storage.commit_batch(crate::core::models::CommandType::Stage, "gik stage .")?;
 
     Ok(())
 }
@@ -231,7 +241,24 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
         if path_str.is_empty() { continue; }
         
         let normalized_path = path_str.replace('\\', "/");
-        crate::commands::stage::stage(storage, normalized_path)?;
+        let file = std::fs::File::open(&path)?;
+        let meta = file.metadata()?;
+        let hash = crate::core::objects::hash_blob(&file, meta.len())?;
+        
+        let mtime = meta.modified()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or(std::time::Duration::from_secs(0))
+            .as_secs();
+
+        let file = std::fs::File::open(&path)?;
+        let old_entry = storage.index().stage_file(&normalized_path, &hash, meta.len(), mtime, file)?;
+        let new_entry = storage.index().get_staged_entry(&normalized_path)?;
+        storage.log_action(crate::core::models::UndoAction::UpdateIndex {
+            path: normalized_path,
+            old_entry,
+            new_entry,
+        });
     }
 
     Ok(())
@@ -243,7 +270,14 @@ fn remove_ignored_from_index(storage: &Storage, matcher: &IgnoreMatcher) -> Resu
     for (path, _) in currently_staged {
         if matcher.is_ignored(&path) {
             println!("Removing ignored file from index: {}", path);
-            storage.index().unstage_file(&path)?;
+            let old_entry = storage.index().unstage_file(&path)?;
+            if let Some(_e) = old_entry.clone() {
+                storage.log_action(crate::core::models::UndoAction::UpdateIndex {
+                    path: path.clone(),
+                    old_entry,
+                    new_entry: None,
+                });
+            }
         }
     }
     Ok(())

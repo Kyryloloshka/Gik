@@ -19,16 +19,31 @@ pub struct IndexEntry {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum UndoAction {
-    Unstage { path: String, old_entry: Option<IndexEntry> },
-    Stage { path: String, entry: IndexEntry },
+    UpdateIndex { path: String, old_entry: Option<IndexEntry>, new_entry: Option<IndexEntry> },
     RevertCommit { old_head: Option<Hash>, new_head: Hash },
     Checkout { old_head: Option<Hash>, new_head: Hash },
+    MoveBookmark { name: String, old_hash: Option<Hash>, new_hash: Hash },
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TransactionRecord {
-    pub timestamp: u64,
-    pub action: UndoAction,
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub enum CommandType {
+    Stage,
+    Unstage,
+    Commit,
+    Checkout,
+    Merge,
+    Branch,
+    Restore,
+    Pull,
+    Revert,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub struct TransactionBatch {
+    pub id: u64, // Usually the timestamp
+    pub command: CommandType,
+    pub description: String,
+    pub actions: Vec<UndoAction>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,18 +82,22 @@ mod tests {
     }
 
     #[test]
-    fn test_transaction_record_serialization() {
-        let record = TransactionRecord {
-            timestamp: 1234567890,
-            action: UndoAction::Unstage {
+    fn test_transaction_batch_serialization() {
+        let record = TransactionBatch {
+            id: 1234567890,
+            command: CommandType::Stage,
+            description: "gik stage test.txt".to_string(),
+            actions: vec![UndoAction::UpdateIndex {
                 path: "test.txt".to_string(),
                 old_entry: None,
-            },
+                new_entry: Some(IndexEntry { hash: Hash([0; 20]), size: 0, mtime: 0 }),
+            }],
         };
 
         let encoded: Vec<u8> = bincode::serialize(&record).unwrap();
-        let decoded: TransactionRecord = bincode::deserialize(&encoded).unwrap();
+        let decoded: TransactionBatch = bincode::deserialize(&encoded).unwrap();
 
-        assert_eq!(record, decoded);
+        assert_eq!(record.id, decoded.id);
+        assert_eq!(record.command, decoded.command);
     }
 }

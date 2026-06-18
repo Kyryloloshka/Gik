@@ -24,7 +24,7 @@ pub use log::log;
 pub use restore::restore;
 pub use stage::stage;
 pub use status::status;
-pub use undo::undo;
+pub use undo::{undo, redo};
 pub use update::update;
 pub use checkout::checkout;
 pub use branch::branch;

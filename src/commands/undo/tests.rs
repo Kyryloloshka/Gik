@@ -15,7 +15,7 @@ fn test_undo_works() {
     // Undo staging
     crate::commands::stage(&env.storage, file_path.to_string()).unwrap();
     assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_some());
-    undo(&env.storage).unwrap();
+    undo(&env.storage, true, false).unwrap();
     assert!(env.storage.index().get_staged_hash(file_path).unwrap().is_none());
 
     // Undo commit
@@ -24,6 +24,6 @@ fn test_undo_works() {
     let first_head = env.storage.commits().get_current_head().unwrap();
     assert!(first_head.is_some());
 
-    undo(&env.storage).unwrap();
+    undo(&env.storage, true, false).unwrap();
     assert!(env.storage.commits().get_current_head().unwrap().is_none());
 }
