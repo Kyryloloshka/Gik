@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "gik"
-version = "0.3.27"
+version = "0.3.28"
 dependencies = [
  "base64",
  "bincode",
@@ -680,6 +680,7 @@ dependencies = [
  "glob",
  "hex",
  "ignore",
+ "indicatif",
  "redb",
  "renderdag",
  "self_update",

@@ -38,8 +38,8 @@ fn run_cli() -> Result<()> {
         Commands::Init => {
             commands::init(crate::config::DB_PATH)?;
         }
-        Commands::Clone { url, directory } => {
-            commands::clone::clone(&url, directory)?;
+        Commands::Clone { url, directory, branch } => {
+            commands::clone::clone(&url, directory, branch)?;
         }
         Commands::Update => {
             commands::update()?;

@@ -9,7 +9,7 @@ use std::fs;
 /// Creates the directory, initializes the storage, configures the remote,
 /// fetches the packfile, and updates the local refs.
 /// Returns the name of the directory cloned into and the target branch name.
-pub fn execute_clone(url: &str, directory: Option<String>) -> Result<(String, String)> {
+pub fn execute_clone(url: &str, directory: Option<String>, specified_branch: Option<String>) -> Result<(String, String)> {
     let (clean_url, token_from_url) = parse_url(url);
     
     let target_dir_name = match directory {
@@ -44,20 +44,33 @@ pub fn execute_clone(url: &str, directory: Option<String>) -> Result<(String, St
     
     let client = GitClient::new(clean_url.clone(), token);
     
-    let branch = "main";
-    let remote_head = match client.discover_fetch_refs(branch) {
-        Ok(Some(hash)) => hash,
-        Ok(None) => return Err(GikError::Branch(format!("Remote branch '{}' not found. Empty repository?", branch))),
-        Err(e) => return Err(e),
+    let (branch, remote_head) = if let Some(b) = specified_branch {
+        match client.discover_fetch_refs(&b) {
+            Ok(Some(hash)) => (b, hash),
+            Ok(None) => return Err(GikError::Branch(format!("Remote branch '{}' not found. Empty repository?", b))),
+            Err(e) => return Err(e),
+        }
+    } else {
+        match client.discover_fetch_refs("main") {
+            Ok(Some(hash)) => ("main".to_string(), hash),
+            Ok(None) => {
+                match client.discover_fetch_refs("master") {
+                    Ok(Some(hash)) => ("master".to_string(), hash),
+                    Ok(None) => return Err(GikError::Branch("Remote branches 'main' and 'master' not found. Try specifying a branch with --branch.".to_string())),
+                    Err(e) => return Err(e),
+                }
+            }
+            Err(e) => return Err(e),
+        }
     };
     
     let mut reader = client.fetch_packfile(&remote_head, None)?;
     decode_packfile(&mut reader, &storage)?;
     
-    storage.refs().set_ref(branch, &remote_head)?;
-    storage.session().set_current_bookmark(branch)?;
+    storage.refs().set_ref(&branch, &remote_head)?;
+    storage.session().set_current_bookmark(&branch)?;
     
-    Ok((target_dir_name, branch.to_string()))
+    Ok((target_dir_name, branch))
 }
 
 /// Parses the URL and extracts credentials if they exist.

@@ -18,6 +18,9 @@ pub enum Commands {
         url: String,
         /// The directory to clone into
         directory: Option<String>,
+        /// Branch to clone instead of the default main branch
+        #[arg(short, long)]
+        branch: Option<String>,
     },
     /// Stage a file for commit
     Stage {

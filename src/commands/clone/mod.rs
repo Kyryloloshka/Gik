@@ -2,11 +2,11 @@ use crate::error::Result;
 use crate::core::storage::Storage;
 use crate::commands::checkout::checkout;
 
-pub fn clone(url: &str, directory: Option<String>) -> Result<()> {
+pub fn clone(url: &str, directory: Option<String>, specified_branch: Option<String>) -> Result<()> {
     println!("Cloning repository...");
     
     // Core business logic handles fetching, decoding, and setting up the DB
-    let (target_dir, branch) = crate::core::clone_ops::execute_clone(url, directory)?;
+    let (target_dir, branch) = crate::core::clone_ops::execute_clone(url, directory, specified_branch)?;
     
     println!("Fetching objects...");
     println!("Decoding packfile...");

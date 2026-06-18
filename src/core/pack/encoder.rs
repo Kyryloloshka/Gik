@@ -41,7 +41,15 @@ pub fn build_packfile(storage: &crate::core::storage::Storage, missing: Vec<crat
     let mut temp_pack = tempfile::tempfile().map_err(|e| crate::error::GikError::Io(e))?;
     let _h = write_packfile_header(&mut temp_pack, missing.len() as u32)?;
     
+    let pb = indicatif::ProgressBar::new(missing.len() as u64);
+    pb.set_style(indicatif::ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.yellow/blue}] {pos}/{len} ({eta}) {msg}")
+        .unwrap()
+        .progress_chars("#>-"));
+    pb.set_message("Compressing objects...");
+    
     for hash in missing {
+        pb.inc(1);
         if let Some(meta) = storage.commits().get_commit_meta(&hash)? {
             let (author_name, author_email) = if let Some(open) = meta.author.find('<') {
                 if let Some(close) = meta.author.find('>') {
@@ -84,6 +92,8 @@ pub fn build_packfile(storage: &crate::core::storage::Storage, missing: Vec<crat
             return Err(crate::error::GikError::NotFound(format!("Missing object {}", hash)));
         }
     }
+    
+    pb.finish_with_message("Compression completed.");
     
     // Compute checksum
     use std::io::{Read, Seek, SeekFrom};

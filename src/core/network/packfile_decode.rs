@@ -2,29 +2,20 @@ use std::io::{Read, Write};
 use crate::error::{Result, GikError};
 use crate::core::storage::Storage;
 use crate::core::hash::Hash;
-use flate2::read::ZlibDecoder;
+use flate2::bufread::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use sha1::{Sha1, Digest};
 use crate::core::models::CommitMeta;
-
-struct ByteReader<'a, R: Read> {
-    inner: &'a mut R,
-}
-
-impl<'a, R: Read> Read for ByteReader<'a, R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if buf.is_empty() { return Ok(0); }
-        self.inner.read(&mut buf[0..1])
-    }
-}
+use indicatif::{ProgressBar, ProgressStyle};
 
 struct PendingDelta {
     base_hash: Hash,
     delta_data: Vec<u8>,
 }
 
-pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()> {
+pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<()> {
+    let mut reader = std::io::BufReader::new(reader_in);
     let mut header = [0u8; 12];
     reader.read_exact(&mut header)?;
     if &header[0..4] != b"PACK" {
@@ -32,11 +23,17 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
     }
     
     let object_count = u32::from_be_bytes(header[8..12].try_into().unwrap());
-    println!("Packfile contains {} objects", object_count);
+    let pb = ProgressBar::new(object_count as u64);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
+        .unwrap()
+        .progress_chars("#>-"));
+    pb.set_message("Decoding objects...");
     
     let mut pending_deltas = Vec::new();
     
     for _i in 0..object_count {
+        pb.inc(1);
         let mut byte = [0u8; 1];
         reader.read_exact(&mut byte)?;
         
@@ -57,7 +54,7 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
             reader.read_exact(&mut base_hash_bytes)?;
             let base_hash = Hash(base_hash_bytes);
             
-            let mut zlib = ZlibDecoder::new(ByteReader { inner: reader.by_ref() });
+            let mut zlib = ZlibDecoder::new(&mut reader);
             let mut delta_data = Vec::new();
             zlib.read_to_end(&mut delta_data)?;
             
@@ -73,7 +70,7 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
             3 => "blob",
             _ => return Err(GikError::Io(std::io::Error::other(format!("Unsupported pack object type: {}", obj_type)))),
         };
-        let mut zlib = ZlibDecoder::new(ByteReader { inner: reader.by_ref() });
+        let mut zlib = ZlibDecoder::new(&mut reader);
         let mut decompressed = Vec::new();
         zlib.read_to_end(&mut decompressed)?;
         
@@ -100,6 +97,15 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
             storage.commits().insert_commit_meta(&hash, meta)?;
         }
     }
+    
+    pb.finish_with_message("Decoding completed.");
+    
+    let pb_deltas = ProgressBar::new(pending_deltas.len() as u64);
+    pb_deltas.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.magenta/red}] {pos}/{len} ({eta}) {msg}")
+        .unwrap()
+        .progress_chars("#>-"));
+    pb_deltas.set_message("Resolving deltas...");
     
     // Resolve deltas
     while !pending_deltas.is_empty() {
@@ -134,6 +140,7 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
                 }
                 
                 resolved_any = true;
+                pb_deltas.inc(1);
             } else {
                 next_pending.push(delta);
             }
@@ -142,9 +149,11 @@ pub fn decode_packfile<R: Read>(reader: &mut R, storage: &Storage) -> Result<()>
         if !resolved_any && !next_pending.is_empty() {
             return Err(GikError::Io(std::io::Error::other(format!("Missing base object for delta: {}", next_pending[0].base_hash))));
         }
+        pb_deltas.set_length((pb_deltas.position() + next_pending.len() as u64) as u64);
         pending_deltas = next_pending;
     }
     
+    pb_deltas.finish_with_message("Deltas resolved.");
     Ok(())
 }
 
