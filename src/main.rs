@@ -15,16 +15,18 @@ fn main() {
     }
 }
 
+use colored::Colorize;
+
 fn print_error_and_help(e: &error::GikError) {
-    eprintln!("❌ Error: {}", e);
+    eprintln!("{}", format!("Error: {}", e).red().bold());
     match e {
-        error::GikError::Config(_) => eprintln!("💡 Help: Use 'gik config <key> <value>' to configure your repository."),
-        error::GikError::Auth(_) => eprintln!("💡 Help: Check if your GITHUB_TOKEN is valid and has the necessary permissions."),
-        error::GikError::DirtyWorkspace(_) => eprintln!("💡 Help: Run 'gik status' to see your changes. Use 'gik commit' to save them or 'gik restore' to discard."),
-        error::GikError::Branch(_) => eprintln!("💡 Help: Use 'gik branch' to see available branches."),
-        error::GikError::NotFound(_) => eprintln!("💡 Help: Ensure the object, commit, or path you specified exists."),
-        error::GikError::Merge(_) => eprintln!("💡 Help: Ensure you are merging a valid commit and the working directory is clean."),
-        error::GikError::AmbiguousHash(_) => eprintln!("💡 Help: Please provide more characters of the hash to uniquely identify it."),
+        error::GikError::Config(_) => eprintln!("{}", "Help: Use 'gik config <key> <value>' to configure your repository.".yellow()),
+        error::GikError::Auth(_) => eprintln!("{}", "Help: Check if your GITHUB_TOKEN is valid and has the necessary permissions.".yellow()),
+        error::GikError::DirtyWorkspace(_) => eprintln!("{}", "Help: Run 'gik status' to see your changes. Use 'gik commit' to save them or 'gik restore' to discard.".yellow()),
+        error::GikError::Branch(_) => eprintln!("{}", "Help: Use 'gik branch' to see available branches.".yellow()),
+        error::GikError::NotFound(_) => eprintln!("{}", "Help: Ensure the object, commit, or path you specified exists.".yellow()),
+        error::GikError::Merge(_) => eprintln!("{}", "Help: Ensure you are merging a valid commit and the working directory is clean.".yellow()),
+        error::GikError::AmbiguousHash(_) => eprintln!("{}", "Help: Please provide more characters of the hash to uniquely identify it.".yellow()),
         _ => {}
     }
 }
