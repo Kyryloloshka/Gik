@@ -10,6 +10,7 @@ use dialoguer::{Select, theme::ColorfulTheme};
 use std::fs;
 use std::path::Path;
 use similar::TextDiff;
+use colored::Colorize;
 
 pub fn merge(storage: &Storage, target: &str) -> Result<()> {
     let current_head = storage.commits().get_current_head()?
@@ -68,6 +69,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
 
     let text_strategy = TextMergeStrategy;
     let mut conflicts_exist = false;
+    let mut resolve_all_manually = false;
     
     // Set MERGE_HEAD early so if they abort/Ctrl+C, the state is remembered.
     storage.session().set_merge_head(&full_hash)?;
@@ -109,14 +111,29 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                         let theirs_str = String::from_utf8_lossy(&theirs);
                         let diff = TextDiff::from_lines(&ours_str, &theirs_str);
                         for change in diff.iter_all_changes() {
-                            let sign = match change.tag() {
-                                similar::ChangeTag::Delete => "-",
-                                similar::ChangeTag::Insert => "+",
-                                similar::ChangeTag::Equal => " ",
-                            };
-                            print!("{}{}", sign, change);
+                            let text = change.to_string();
+                            match change.tag() {
+                                similar::ChangeTag::Delete => print!("-{}", text.red()),
+                                similar::ChangeTag::Insert => print!("+{}", text.green()),
+                                similar::ChangeTag::Equal => print!(" {}", text),
+                            }
                         }
                         println!("");
+
+                        if resolve_all_manually {
+                            let mut combined = Vec::new();
+                            combined.extend_from_slice(b"<<<<<<< HEAD\n");
+                            combined.extend_from_slice(&ours);
+                            if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                            combined.extend_from_slice(b"=======\n");
+                            combined.extend_from_slice(&theirs);
+                            if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
+                            combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
+                            
+                            write_content_to_disk(&combined, &path)?;
+                            println!("Conflict markers written to {}.", path);
+                            continue;
+                        }
 
                         let selections = &[
                             "Keep Ours", 
@@ -124,6 +141,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                             "Accept Both (Ours + Theirs)", 
                             "Accept Both (Theirs + Ours)", 
                             "Resolve manually in editor",
+                            "Resolve ALL conflicts manually in editor",
                             "Abort Merge"
                         ];
                         
@@ -176,6 +194,20 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                                 
                                 crate::commands::stage::stage(storage, path)?;
                             }
+                            5 => {
+                                resolve_all_manually = true;
+                                let mut combined = Vec::new();
+                                combined.extend_from_slice(b"<<<<<<< HEAD\n");
+                                combined.extend_from_slice(&ours);
+                                if !ours.ends_with(b"\n") && !ours.is_empty() { combined.extend_from_slice(b"\n"); }
+                                combined.extend_from_slice(b"=======\n");
+                                combined.extend_from_slice(&theirs);
+                                if !theirs.ends_with(b"\n") && !theirs.is_empty() { combined.extend_from_slice(b"\n"); }
+                                combined.extend_from_slice(format!(">>>>>>> {}\n", target).as_bytes());
+                                
+                                write_content_to_disk(&combined, &path)?;
+                                println!("Conflict markers written to {}.", path);
+                            }
                             _ => {
                                 storage.session().clear_merge_head()?;
                                 return Err(crate::error::GikError::Aborted("Merge aborted by user".to_string()));
@@ -185,6 +217,12 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
                 }
             }
         }
+    }
+
+    if resolve_all_manually {
+        println!("All remaining conflicts have markers written.");
+        println!("Please open your editor, resolve them, use `gik stage <file>`, and then run `gik merge --continue`.");
+        return Ok(());
     }
 
     if conflicts_exist {
