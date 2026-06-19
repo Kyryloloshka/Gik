@@ -49,10 +49,7 @@ pub fn merge(storage: &Storage, target: &str) -> Result<()> {
         }
 
         // Restore workspace and index
-        let meta = storage.commits().get_commit_meta(&full_hash)?.unwrap();
         crate::core::workspace::restore_workspace(storage, &full_hash)?;
-        let tree_files = crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
-        storage.index().set_index_state(&tree_files)?;
         storage.commits().set_head(&full_hash)?;
 
         return Ok(());

@@ -190,4 +190,28 @@ impl<'a> IndexService<'a> {
         write_txn.commit()?;
         Ok(())
     }
+
+    pub fn set_index_entries(&self, entries: &HashMap<String, IndexEntry>) -> Result<()> {
+        let write_txn = self.storage.repo.db.begin_write()?;
+        {
+            let mut index = write_txn.open_table(STAGE_INDEX)?;
+            let mut keys = Vec::new();
+            for result in index.iter()? {
+                let (path, _) = result?;
+                keys.push(path.value().to_string());
+            }
+            for key in keys {
+                index.remove(key.as_str())?;
+            }
+
+            for (path, entry) in entries {
+                let encoded = bincode::serialize(entry).map_err(|e| {
+                    crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
+                index.insert(path.as_str(), encoded.as_slice())?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
 }

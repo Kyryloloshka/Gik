@@ -7,7 +7,22 @@ use flate2::bufread::ZlibDecoder;
 use indicatif::{ProgressBar, ProgressStyle};
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
+
+struct TeeReader<R: Read, W: Write> {
+    inner: R,
+    writer: W,
+}
+
+impl<R: Read, W: Write> Read for TeeReader<R, W> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 {
+            self.writer.write_all(&buf[..n])?;
+        }
+        Ok(n)
+    }
+}
 
 struct PendingDelta {
     base_hash: Hash,
@@ -41,31 +56,30 @@ impl<R: std::io::BufRead> std::io::BufRead for PositionTracker<R> {
 fn get_base_payload(
     hash: &Hash,
     current_pack_index: &HashMap<Hash, u64>,
-    pack_path: &std::path::Path,
+    mmap: &memmap2::Mmap,
     storage: &Storage,
+    cache: &mut lru::LruCache<Hash, (String, Vec<u8>)>,
 ) -> Result<Option<(String, Vec<u8>)>> {
+    if let Some(cached) = cache.get(hash) {
+        return Ok(Some(cached.clone()));
+    }
+
     if let Some(&offset) = current_pack_index.get(hash) {
-        let mut file = std::fs::File::open(pack_path).map_err(|e| GikError::Io(e))?;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(|e| GikError::Io(e))?;
-        let mut buf_reader = std::io::BufReader::new(file);
-        let (obj_type, _) = read_object_header(&mut buf_reader)?;
+        let mut slice = &mmap[offset as usize..];
+        let (obj_type, _) = read_object_header(&mut slice)?;
 
         if obj_type == 7 {
             // OBJ_REF_DELTA
             let mut base_hash_bytes = [0u8; 20];
-            buf_reader
-                .read_exact(&mut base_hash_bytes)
-                .map_err(|e| GikError::Io(e))?;
+            slice.read_exact(&mut base_hash_bytes).map_err(|e| GikError::Io(e))?;
             let base_hash = Hash(base_hash_bytes);
 
-            let mut zlib = ZlibDecoder::new(&mut buf_reader);
+            let mut zlib = ZlibDecoder::new(slice);
             let mut delta_data = Vec::new();
-            zlib.read_to_end(&mut delta_data)
-                .map_err(|e| GikError::Io(e))?;
+            zlib.read_to_end(&mut delta_data).map_err(|e| GikError::Io(e))?;
 
             let (type_str, base_payload) =
-                get_base_payload(&base_hash, current_pack_index, pack_path, storage)?.ok_or_else(
+                get_base_payload(&base_hash, current_pack_index, mmap, storage, cache)?.ok_or_else(
                     || {
                         GikError::Io(std::io::Error::other(format!(
                             "Missing base for delta: {}",
@@ -75,7 +89,9 @@ fn get_base_payload(
                 )?;
 
             let target_payload = apply_delta(&base_payload, &delta_data)?;
-            return Ok(Some((type_str, target_payload)));
+            let result = (type_str, target_payload);
+            cache.put(hash.clone(), result.clone());
+            return Ok(Some(result));
         } else if obj_type == 6 {
             return Err(GikError::Io(std::io::Error::other(
                 "OBJ_OFS_DELTA not supported yet",
@@ -92,25 +108,30 @@ fn get_base_payload(
                     ))))
                 }
             };
-            let mut zlib = ZlibDecoder::new(&mut buf_reader);
+            let mut zlib = ZlibDecoder::new(slice);
             let mut decompressed = Vec::new();
             zlib.read_to_end(&mut decompressed)
                 .map_err(|e| GikError::Io(e))?;
-            return Ok(Some((type_str.to_string(), decompressed)));
+            
+            let result = (type_str.to_string(), decompressed);
+            cache.put(hash.clone(), result.clone());
+            return Ok(Some(result));
         }
     } else {
         if let Ok(Some(compressed_base)) = storage.objects().get_object(hash) {
             let (type_str, _, base_payload) =
                 crate::core::objects::decompress_object(&compressed_base[..])
                     .map_err(|e| GikError::Io(e))?;
-            return Ok(Some((type_str, base_payload)));
+            let result = (type_str, base_payload);
+            cache.put(hash.clone(), result.clone());
+            return Ok(Some(result));
         }
         return Ok(None);
     }
 }
 
 pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<()> {
-    // 1. Save stream to disk
+    // 1. Read header
     let mut header = [0u8; 12];
     reader_in
         .read_exact(&mut header)
@@ -132,38 +153,27 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
     let pack_name = format!("pack-{}.pack", pack_id);
     let pack_path = pack_dir.join(&pack_name);
 
-    let pb_download = ProgressBar::new_spinner();
-    pb_download.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} [{elapsed_precise}] Downloading packfile... {bytes} ({bytes_per_sec})")
-            .unwrap(),
-    );
-    let mut wrapped_reader = pb_download.wrap_read(reader_in);
-
     let mut file = std::fs::File::create(&pack_path).map_err(|e| GikError::Io(e))?;
     file.write_all(&header).map_err(|e| GikError::Io(e))?;
-    std::io::copy(&mut wrapped_reader, &mut file).map_err(|e| GikError::Io(e))?;
-    file.sync_all().map_err(|e| GikError::Io(e))?;
-
-    pb_download.finish_with_message("Download completed.");
-
-    // 2. Parse and index
-    let file = std::fs::File::open(&pack_path).map_err(|e| GikError::Io(e))?;
-    let mut tracker = PositionTracker {
-        inner: std::io::BufReader::new(file),
-        pos: 0,
-    };
-    tracker
-        .read_exact(&mut header)
-        .map_err(|e| GikError::Io(e))?;
 
     let object_count = u32::from_be_bytes(header[8..12].try_into().unwrap());
+    
     let pb = ProgressBar::new(object_count as u64);
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
         .unwrap()
         .progress_chars("#>-"));
-    pb.set_message("Indexing packfile...");
+    pb.set_message("Downloading & Indexing packfile...");
+
+    let tee = TeeReader {
+        inner: reader_in,
+        writer: file,
+    };
+
+    let mut tracker = PositionTracker {
+        inner: std::io::BufReader::new(tee),
+        pos: 12,
+    };
 
     let mut pending_deltas = Vec::new();
     let mut current_pack_index = HashMap::new(); // Hash -> offset
@@ -234,7 +244,17 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
         }
     }
 
-    pb.finish_with_message("Indexing completed.");
+    pb.finish_with_message("Download and Indexing completed.");
+
+    // Drain the rest of the file (trailing checksum, etc)
+    std::io::copy(&mut tracker, &mut std::io::sink()).map_err(|e| GikError::Io(e))?;
+
+    // Drop tracker to close the file handle before mmap
+    drop(tracker);
+
+    let mmap_file = std::fs::File::open(&pack_path).map_err(|e| GikError::Io(e))?;
+    let mmap = unsafe { memmap2::MmapOptions::new().map(&mmap_file).map_err(|e| GikError::Io(e))? };
+    let mut cache = lru::LruCache::new(std::num::NonZeroUsize::new(2000).unwrap());
 
     let pb_deltas = ProgressBar::new(pending_deltas.len() as u64);
     pb_deltas.set_style(ProgressStyle::default_bar()
@@ -250,7 +270,7 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
 
         for delta in pending_deltas {
             let base_payload_opt =
-                get_base_payload(&delta.base_hash, &current_pack_index, &pack_path, storage)?;
+                get_base_payload(&delta.base_hash, &current_pack_index, &mmap, storage, &mut cache)?;
 
             if let Some((type_str, base_payload)) = base_payload_opt {
                 let target_payload = apply_delta(&base_payload, &delta.delta_data)?;

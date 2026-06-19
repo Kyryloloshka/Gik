@@ -41,14 +41,6 @@ pub fn undo(storage: &Storage, yes: bool, list: bool) -> Result<()> {
                 let current_head = storage.commits().get_current_head()?;
                 if let Some(h) = current_head {
                     crate::core::workspace::restore_workspace(storage, &h)?;
-                    let meta = storage.commits().get_commit_meta(&h)?.ok_or_else(|| {
-                        crate::error::GikError::NotFound(
-                            "Commit meta missing during undo".to_string(),
-                        )
-                    })?;
-                    let tree_files =
-                        crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
-                    storage.index().set_index_state(&tree_files)?;
                 } else {
                     storage
                         .index()
@@ -105,14 +97,6 @@ pub fn redo(storage: &Storage, yes: bool, list: bool) -> Result<()> {
                 let current_head = storage.commits().get_current_head()?;
                 if let Some(h) = current_head {
                     crate::core::workspace::restore_workspace(storage, &h)?;
-                    let meta = storage.commits().get_commit_meta(&h)?.ok_or_else(|| {
-                        crate::error::GikError::NotFound(
-                            "Commit meta missing during redo".to_string(),
-                        )
-                    })?;
-                    let tree_files =
-                        crate::core::objects::get_commit_tree_files(storage, &meta.tree_hash)?;
-                    storage.index().set_index_state(&tree_files)?;
                 }
             }
             _ => {}

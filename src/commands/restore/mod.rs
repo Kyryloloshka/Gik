@@ -20,7 +20,6 @@ pub fn restore(storage: &Storage, path: &str) -> Result<()> {
     if path == "." {
         println!("Restoring all files from HEAD...");
         crate::core::workspace::restore_workspace(storage, &head_hash)?;
-        storage.index().set_index_state(&head_files)?;
     } else {
         // Normalize path
         let normalized = path.replace('\\', "/");

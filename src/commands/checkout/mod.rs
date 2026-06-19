@@ -1,4 +1,4 @@
-use crate::core::objects::get_commit_tree_files;
+
 use crate::core::storage::Storage;
 use crate::core::workspace::{get_status, restore_workspace};
 use crate::error::Result;
@@ -38,7 +38,7 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     };
 
     // 3. Ensure the found hash is a commit
-    let meta = storage
+    storage
         .commits()
         .get_commit_meta(&full_hash)?
         .ok_or_else(|| {
@@ -48,9 +48,6 @@ pub fn checkout(storage: &Storage, hash: &str, force: bool) -> Result<()> {
     // 4. Restore Workspace
     restore_workspace(storage, &full_hash)?;
 
-    // 5. Update Index and HEAD
-    let tree_files = get_commit_tree_files(storage, &meta.tree_hash)?;
-    storage.index().set_index_state(&tree_files)?;
     storage.commits().set_head(&full_hash)?;
 
     // 6. Update Session Hint

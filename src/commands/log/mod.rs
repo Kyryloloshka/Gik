@@ -37,29 +37,10 @@ pub fn log(storage: &Storage, all: bool, json: bool, skip: Option<usize>, limit:
         return Ok(());
     }
 
-    // Topological sort using DFS
+    // Iterative Topological sort (DFS post-order) to prevent stack overflow on huge histories
     let mut visited = HashSet::new();
     let mut sorted_commits = Vec::new();
-
-    fn dfs(
-        hash: Hash,
-        storage: &Storage,
-        visited: &mut HashSet<Hash>,
-        sorted: &mut Vec<(Hash, CommitMeta)>,
-    ) {
-        if visited.contains(&hash) {
-            return;
-        }
-        visited.insert(hash);
-        if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
-            // Visit parents first
-            for parent in &meta.parent_hashes {
-                dfs(*parent, storage, visited, sorted);
-            }
-            // Push self
-            sorted.push((hash, meta));
-        }
-    }
+    let mut stack = Vec::new();
 
     // To ensure deterministic tie-breaking and prefer newer commits in the sort,
     // we should process start_hashes by timestamp. But DFS naturally groups branches.
@@ -77,7 +58,34 @@ pub fn log(storage: &Storage, all: bool, json: bool, skip: Option<usize>, limit:
     });
 
     for head_hash in heads {
-        dfs(head_hash, storage, &mut visited, &mut sorted_commits);
+        if !visited.contains(&head_hash) {
+            stack.push((head_hash, false));
+        }
+
+        while let Some((hash, is_processed)) = stack.pop() {
+            if is_processed {
+                if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
+                    sorted_commits.push((hash, meta));
+                }
+            } else {
+                if visited.contains(&hash) {
+                    continue;
+                }
+                visited.insert(hash);
+
+                // Push self back to be processed AFTER parents
+                stack.push((hash, true));
+
+                if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
+                    // Push parents in reverse order so the first parent is popped first
+                    for parent in meta.parent_hashes.into_iter().rev() {
+                        if !visited.contains(&parent) {
+                            stack.push((parent, false));
+                        }
+                    }
+                }
+            }
+        }
     }
     sorted_commits.reverse(); // Now children come before parents
 

@@ -1,6 +1,6 @@
 [package]
 name = "gik"
-version = "0.3.31"
+version = "0.3.32"
 edition = "2021"
 description = "A Git-like transactional version control system written in Rust"
 repository = "https://github.com/Kyryloloshka/Gik"
@@ -31,6 +31,8 @@ ignore = "0.4.26"
 renderdag = "0.3.1"
 serde_json = "1.0.150"
 indicatif = "0.17.8"
+memmap2 = "0.9.10"
+lru = "0.18.0"
 
 [dev-dependencies]
 tempfile = "3.8"

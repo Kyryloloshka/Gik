@@ -133,6 +133,7 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
     }
 
     // 4. Restore target files
+    let mut new_index_entries = HashMap::new();
     for (path, hash) in tree_files {
         let compressed_data = storage
             .objects()
@@ -150,7 +151,24 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
         }
 
         std::fs::write(&path, content)?;
+
+        let meta = std::fs::metadata(&path)?;
+        let size = meta.len();
+        let mtime = meta
+            .modified()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or(std::time::Duration::from_secs(0))
+            .as_secs();
+
+        new_index_entries.insert(path, crate::core::models::IndexEntry {
+            hash,
+            size,
+            mtime,
+        });
     }
+
+    storage.index().set_index_entries(&new_index_entries)?;
 
     Ok(())
 }
@@ -219,6 +237,11 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
 
 fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
     let root = std::env::current_dir()?;
+    let index_entries: HashMap<String, crate::core::models::IndexEntry> = storage
+        .index()
+        .get_all_staged_entries()?
+        .into_iter()
+        .collect();
 
     let builder = build_walker(&root);
 
@@ -243,10 +266,12 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
         } else {
             std::borrow::Cow::Borrowed(path_str)
         };
-        let file = std::fs::File::open(&path)?;
-        let meta = file.metadata()?;
-        let hash = crate::core::objects::hash_blob(&file, meta.len())?;
-
+        
+        let meta = match std::fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let size = meta.len();
         let mtime = meta
             .modified()
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
@@ -254,11 +279,20 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
             .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
+        if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
+            if cached.size == size && cached.mtime == mtime {
+                continue; // Unchanged file
+            }
+        }
+
+        let file = std::fs::File::open(&path)?;
+        let hash = crate::core::objects::hash_blob(&file, size)?;
+
         let file = std::fs::File::open(&path)?;
         let old_entry =
             storage
                 .index()
-                .stage_file(&normalized_path, &hash, meta.len(), mtime, file)?;
+                .stage_file(&normalized_path, &hash, size, mtime, file)?;
         let new_entry = storage.index().get_staged_entry(&normalized_path)?;
         storage.log_action(crate::core::models::UndoAction::UpdateIndex {
             path: normalized_path.into_owned(),
