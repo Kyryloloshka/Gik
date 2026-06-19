@@ -14,6 +14,7 @@ pub const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
 pub const PACKFILES: TableDefinition<u32, &str> = TableDefinition::new("packfiles");
 pub const PACKFILE_INDEX: TableDefinition<&[u8; 20], (u32, u64)> =
     TableDefinition::new("packfile_index");
+pub const HEAD_TREE_CACHE: TableDefinition<&[u8; 20], &[u8]> = TableDefinition::new("head_tree_cache");
 
 pub enum DbConnection {
     ReadWrite(Database),
@@ -35,6 +36,10 @@ impl DbConnection {
             Self::ReadWrite(db) => db.begin_write(),
             Self::ReadOnly(_) => panic!("Cannot begin write on read-only database"),
         }
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        matches!(self, Self::ReadOnly(_))
     }
 }
 
@@ -66,9 +71,20 @@ impl Repository {
     }
 
     pub fn open_read_only<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = redb::Builder::new()
-            .open_read_only(path.as_ref())
-            .map_err(|e| crate::error::GikError::DbOpen(e.into()))?;
+        let db = match redb::Builder::new().open_read_only(path.as_ref()) {
+            Ok(db) => db,
+            Err(e) => {
+                // If it failed (likely because the DB is dirty/needs repair after a crash),
+                // opening it in ReadWrite mode will trigger the repair process.
+                if let Ok(rw_db) = Database::create(path.as_ref()) {
+                    drop(rw_db);
+                }
+                // Try read-only again, if it still fails, return the error
+                redb::Builder::new()
+                    .open_read_only(path.as_ref())
+                    .map_err(|_| crate::error::GikError::DbOpen(e.into()))?
+            }
+        };
         Ok(Self {
             db: DbConnection::ReadOnly(db),
         })
@@ -87,6 +103,7 @@ impl Repository {
             let _ = write_txn.open_table(CONFIG)?;
             let _ = write_txn.open_table(PACKFILES)?;
             let _ = write_txn.open_table(PACKFILE_INDEX)?;
+            let _ = write_txn.open_table(HEAD_TREE_CACHE)?;
         }
         write_txn.commit()?;
         Ok(())

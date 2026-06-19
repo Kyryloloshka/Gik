@@ -126,15 +126,40 @@ pub fn restore_workspace(storage: &Storage, target_commit: &Hash) -> Result<()> 
 
     // 3. Clean current disk: remove files that are not in the target tree
     let disk_files = get_disk_state(storage)?;
-    for (path, _) in disk_files {
-        if !tree_files.contains_key(&path) && std::path::Path::new(&path).exists() {
-            std::fs::remove_file(&path)?;
+    for (path, _) in &disk_files {
+        if !tree_files.contains_key(path) && std::path::Path::new(path).exists() {
+            std::fs::remove_file(path)?;
         }
     }
 
     // 4. Restore target files
     let mut new_index_entries = HashMap::new();
     for (path, hash) in tree_files {
+        // Skip decompression and writing if the file on disk already has the identical hash
+        if let Some(disk_hash) = disk_files.get(&path) {
+            if disk_hash == &hash {
+                if let Ok(meta) = std::fs::metadata(&path) {
+                    let size = meta.len();
+                    let mtime = meta
+                        .modified()
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                        .unwrap_or(std::time::Duration::from_secs(0))
+                        .as_secs();
+
+                    new_index_entries.insert(
+                        path,
+                        crate::core::models::IndexEntry {
+                            hash,
+                            size,
+                            mtime,
+                        },
+                    );
+                    continue;
+                }
+            }
+        }
+
         let compressed_data = storage
             .objects()
             .get_object(&hash)?
@@ -187,49 +212,68 @@ fn get_disk_state(storage: &Storage) -> Result<HashMap<String, Hash>> {
 
     let builder = build_walker(&root);
 
-    for result in builder.build() {
-        let entry = match result {
-            Ok(e) => e,
-            Err(_) => continue, // Skip files we don't have access to
-        };
-        if entry.file_type().map_or(true, |ft| ft.is_dir()) {
-            continue;
-        }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let index_entries = std::sync::Arc::new(index_entries);
+    let root_arc = std::sync::Arc::new(root.clone());
 
-        let path = entry.path();
-        let relative_path = path.strip_prefix(&root).unwrap_or(path);
-        let path_str = relative_path.to_str().unwrap_or("");
-        if path_str.is_empty() {
-            continue;
-        }
+    builder.build_parallel().run(|| {
+        let tx = tx.clone();
+        let index_entries = index_entries.clone();
+        let root = root_arc.clone();
 
-        let normalized_path = if path_str.contains('\\') {
-            std::borrow::Cow::Owned(path_str.replace('\\', "/"))
-        } else {
-            std::borrow::Cow::Borrowed(path_str)
-        };
-        if let Ok(metadata) = entry.metadata() {
-            let size = metadata.len();
-            let mtime = metadata
-                .modified()
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap_or(std::time::Duration::from_secs(0))
-                .as_secs();
+        Box::new(move |result| {
+            let entry = match result {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+            if entry.file_type().map_or(true, |ft| ft.is_dir()) {
+                return ignore::WalkState::Continue;
+            }
 
-            if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
-                if cached.size == size && cached.mtime == mtime {
-                    disk_files.insert(normalized_path.into_owned(), cached.hash.clone());
-                    continue;
+            let path = entry.path();
+            let relative_path = path.strip_prefix(root.as_ref()).unwrap_or(path);
+            let path_str = relative_path.to_str().unwrap_or("");
+            if path_str.is_empty() {
+                return ignore::WalkState::Continue;
+            }
+
+            let normalized_path = if path_str.contains('\\') {
+                std::borrow::Cow::Owned(path_str.replace('\\', "/"))
+            } else {
+                std::borrow::Cow::Borrowed(path_str)
+            };
+
+            if let Ok(metadata) = entry.metadata() {
+                let size = metadata.len();
+                let mtime = metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .unwrap_or(std::time::Duration::from_secs(0))
+                    .as_secs();
+
+                if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
+                    if cached.size == size && cached.mtime == mtime {
+                        let _ = tx.send((normalized_path.into_owned(), cached.hash.clone()));
+                        return ignore::WalkState::Continue;
+                    }
+                }
+
+                if let Ok(file) = std::fs::File::open(path) {
+                    if let Ok(hash) = crate::core::objects::hash_file(&file, size) {
+                        let _ = tx.send((normalized_path.into_owned(), hash));
+                    }
                 }
             }
 
-            if let Ok(file) = std::fs::File::open(path) {
-                if let Ok(hash) = crate::core::objects::hash_blob(file, size) {
-                    disk_files.insert(normalized_path.into_owned(), hash);
-                }
-            }
-        }
+            ignore::WalkState::Continue
+        })
+    });
+
+    drop(tx);
+
+    for (path, hash) in rx {
+        disk_files.insert(path, hash);
     }
 
     Ok(disk_files)
@@ -245,59 +289,104 @@ fn scan_and_stage(storage: &Storage, _matcher: &IgnoreMatcher) -> Result<()> {
 
     let builder = build_walker(&root);
 
-    for result in builder.build() {
-        let entry = match result {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        if entry.file_type().map_or(true, |ft| ft.is_dir()) {
-            continue;
-        }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let index_entries = std::sync::Arc::new(index_entries);
+    let root_arc = std::sync::Arc::new(root.clone());
 
-        let path = entry.path();
-        let relative_path = path.strip_prefix(&root).unwrap_or(path);
-        let path_str = relative_path.to_str().unwrap_or("");
-        if path_str.is_empty() {
-            continue;
-        }
+    builder.build_parallel().run(|| {
+        let tx = tx.clone();
+        let index_entries = index_entries.clone();
+        let root = root_arc.clone();
 
-        let normalized_path = if path_str.contains('\\') {
-            std::borrow::Cow::Owned(path_str.replace('\\', "/"))
-        } else {
-            std::borrow::Cow::Borrowed(path_str)
-        };
-        
-        let meta = match std::fs::metadata(&path) {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let size = meta.len();
-        let mtime = meta
-            .modified()
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap_or(std::time::Duration::from_secs(0))
-            .as_secs();
-
-        if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
-            if cached.size == size && cached.mtime == mtime {
-                continue; // Unchanged file
+        Box::new(move |result| {
+            let entry = match result {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+            if entry.file_type().map_or(true, |ft| ft.is_dir()) {
+                return ignore::WalkState::Continue;
             }
-        }
 
-        let file = std::fs::File::open(&path)?;
-        let hash = crate::core::objects::hash_blob(&file, size)?;
+            let path = entry.path();
+            let relative_path = path.strip_prefix(root.as_ref()).unwrap_or(path);
+            let path_str = relative_path.to_str().unwrap_or("");
+            if path_str.is_empty() {
+                return ignore::WalkState::Continue;
+            }
 
-        let file = std::fs::File::open(&path)?;
-        let old_entry =
-            storage
-                .index()
-                .stage_file(&normalized_path, &hash, size, mtime, file)?;
-        let new_entry = storage.index().get_staged_entry(&normalized_path)?;
+            let normalized_path = if path_str.contains('\\') {
+                std::borrow::Cow::Owned(path_str.replace('\\', "/"))
+            } else {
+                std::borrow::Cow::Borrowed(path_str)
+            };
+            
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+            let size = meta.len();
+            let mtime = meta
+                .modified()
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or(std::time::Duration::from_secs(0))
+                .as_secs();
+
+            if let Some(cached) = index_entries.get(normalized_path.as_ref()) {
+                if cached.size == size && cached.mtime == mtime {
+                    return ignore::WalkState::Continue; // Unchanged file
+                }
+            }
+
+            if let Ok(mut file) = std::fs::File::open(path) {
+                if let Ok(hash) = crate::core::objects::hash_file(&file, size) {
+                    use std::io::Seek;
+                    let _ = file.seek(std::io::SeekFrom::Start(0));
+
+                    let hash_str = hash.to_string();
+                    let obj_path = root.join(crate::config::GIK_DIR_NAME).join(crate::config::OBJECTS_DIR_NAME).join(&hash_str[0..2]).join(&hash_str[2..]);
+                    
+                    if !obj_path.exists() {
+                        let parent = obj_path.parent().unwrap();
+                        let _ = std::fs::create_dir_all(parent);
+                        let time = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos();
+                        let tmp_path = parent.join(format!("{}_{}_{}", crate::config::TMP_OBJECT_PREFIX, hash_str, time));
+                        if let Ok(mut tmp_file) = std::fs::File::create(&tmp_path) {
+                            let mut encoder = flate2::write::ZlibEncoder::new(&mut tmp_file, flate2::Compression::default());
+                            let header = format!("blob {}\0", size);
+                            let _ = std::io::Write::write_all(&mut encoder, header.as_bytes());
+                            let _ = std::io::copy(&mut file, &mut encoder);
+                            let _ = encoder.finish();
+                            let _ = tmp_file.sync_all();
+                            let _ = std::fs::rename(&tmp_path, &obj_path);
+                        }
+                    }
+
+                    let _ = tx.send((normalized_path.into_owned(), hash, size, mtime));
+                }
+            }
+
+            ignore::WalkState::Continue
+        })
+    });
+
+    drop(tx);
+
+    for (normalized_path, hash, size, mtime) in rx {
+        let entry = crate::core::models::IndexEntry {
+            hash: hash.clone(),
+            size,
+            mtime,
+        };
+        let old_entry = storage.index().get_staged_entry(&normalized_path)?;
+        storage.index().set_staged_entry(&normalized_path, &entry)?;
         storage.log_action(crate::core::models::UndoAction::UpdateIndex {
-            path: normalized_path.into_owned(),
+            path: normalized_path,
             old_entry,
-            new_entry,
+            new_entry: Some(entry),
         });
     }
 

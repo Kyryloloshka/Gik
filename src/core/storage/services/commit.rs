@@ -85,4 +85,34 @@ impl<'a> CommitService<'a> {
         write_txn.commit()?;
         Ok(())
     }
+
+    pub fn get_tree_cache(&self, tree_hash: &Hash) -> Result<Option<std::collections::HashMap<String, Hash>>> {
+        let read_txn = self.repo.db.begin_read()?;
+        let table = read_txn.open_table(HEAD_TREE_CACHE)?;
+        let guard = table.get(&tree_hash.0)?;
+        if let Some(g) = guard {
+            let map: std::collections::HashMap<String, Hash> = bincode::deserialize(g.value()).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
+            Ok(Some(map))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_tree_cache(&self, tree_hash: &Hash, map: &std::collections::HashMap<String, Hash>) -> Result<()> {
+        if self.repo.db.is_read_only() {
+            return Ok(());
+        }
+        let write_txn = self.repo.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(HEAD_TREE_CACHE)?;
+            let bytes = bincode::serialize(map).map_err(|e| {
+                crate::error::GikError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
+            table.insert(&tree_hash.0, bytes.as_slice())?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
 }

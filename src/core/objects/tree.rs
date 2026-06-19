@@ -176,13 +176,19 @@ pub fn parse_tree(content: &[u8]) -> crate::error::Result<Vec<(u32, String, Hash
     Ok(entries)
 }
 
-/// Recursively traverses trees to return a flat map of path -> blob_hash.
 pub fn get_commit_tree_files(
     storage: &Storage,
     tree_hash: &Hash,
 ) -> crate::error::Result<HashMap<String, Hash>> {
+    if let Ok(Some(map)) = storage.commits().get_tree_cache(tree_hash) {
+        return Ok(map);
+    }
+
     let mut files = HashMap::new();
     recursive_tree_walk(storage, tree_hash, "", &mut files)?;
+    
+    let _ = storage.commits().set_tree_cache(tree_hash, &files);
+    
     Ok(files)
 }
 

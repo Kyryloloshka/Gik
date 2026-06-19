@@ -26,6 +26,24 @@ pub fn hash_blob<R: Read>(mut reader: R, size: u64) -> io::Result<Hash> {
     Ok(Hash(hash))
 }
 
+pub fn hash_file(file: &std::fs::File, size: u64) -> io::Result<Hash> {
+    if size > 16384 {
+        if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(file) } {
+            let mut hasher = Sha1::new();
+            let header = format!("blob {}\0", size);
+            hasher.update(header.as_bytes());
+            hasher.update(&mmap);
+            let result = hasher.finalize();
+            let mut hash = [0u8; 20];
+            hash.copy_from_slice(&result);
+            return Ok(Hash(hash));
+        }
+    }
+
+    let mut reader = file;
+    hash_blob(&mut reader, size)
+}
+
 /// Compresses a blob (including its Git header) using Zlib streaming compression directly into Storage
 pub fn compress_blob<R: std::io::Read>(
     mut reader: R,

@@ -37,68 +37,41 @@ pub fn log(storage: &Storage, all: bool, json: bool, skip: Option<usize>, limit:
         return Ok(());
     }
 
-    // Iterative Topological sort (DFS post-order) to prevent stack overflow on huge histories
+    let mut pq = std::collections::BinaryHeap::new();
     let mut visited = HashSet::new();
-    let mut sorted_commits = Vec::new();
-    let mut stack = Vec::new();
 
-    // To ensure deterministic tie-breaking and prefer newer commits in the sort,
-    // we should process start_hashes by timestamp. But DFS naturally groups branches.
-    // For simplicity, just run DFS.
-    let mut heads: Vec<Hash> = start_hashes.into_iter().collect();
-    // Sort heads by timestamp so we traverse the newest branch first
-    heads.sort_by_key(|h| {
-        storage
-            .commits()
-            .get_commit_meta(h)
-            .ok()
-            .flatten()
-            .map(|m| std::cmp::Reverse(m.timestamp))
-            .unwrap_or(std::cmp::Reverse(0))
-    });
+    for head_hash in start_hashes {
+        if visited.insert(head_hash) {
+            if let Ok(Some(meta)) = storage.commits().get_commit_meta(&head_hash) {
+                // PriorityQueue pops max first, so timestamp is perfect
+                pq.push((meta.timestamp, head_hash, meta));
+            }
+        }
+    }
 
-    for head_hash in heads {
-        if !visited.contains(&head_hash) {
-            stack.push((head_hash, false));
+    let skip_val = skip.unwrap_or(0);
+    let l = limit.unwrap_or(50);
+    let total_needed = if l == 0 { usize::MAX } else { skip_val + l };
+
+    let mut selected_commits = Vec::new();
+
+    while let Some((_ts, hash, meta)) = pq.pop() {
+        selected_commits.push((hash, meta.clone()));
+
+        if selected_commits.len() >= total_needed {
+            break;
         }
 
-        while let Some((hash, is_processed)) = stack.pop() {
-            if is_processed {
-                if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
-                    sorted_commits.push((hash, meta));
-                }
-            } else {
-                if visited.contains(&hash) {
-                    continue;
-                }
-                visited.insert(hash);
-
-                // Push self back to be processed AFTER parents
-                stack.push((hash, true));
-
-                if let Ok(Some(meta)) = storage.commits().get_commit_meta(&hash) {
-                    // Push parents in reverse order so the first parent is popped first
-                    for parent in meta.parent_hashes.into_iter().rev() {
-                        if !visited.contains(&parent) {
-                            stack.push((parent, false));
-                        }
-                    }
+        for parent in &meta.parent_hashes {
+            if visited.insert(*parent) {
+                if let Ok(Some(p_meta)) = storage.commits().get_commit_meta(parent) {
+                    pq.push((p_meta.timestamp, *parent, p_meta));
                 }
             }
         }
     }
-    sorted_commits.reverse(); // Now children come before parents
 
-    let skip_val = skip.unwrap_or(0);
-    let iter = sorted_commits.into_iter().skip(skip_val);
-    
-    let mut selected_commits = Vec::new();
-    let l = limit.unwrap_or(50);
-    if l > 0 {
-        selected_commits.extend(iter.take(l));
-    } else {
-        selected_commits.extend(iter);
-    }
+    let selected_commits: Vec<_> = selected_commits.into_iter().skip(skip_val).collect();
 
     if json {
         let mut json_commits = Vec::new();

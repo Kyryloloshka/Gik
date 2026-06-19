@@ -1,7 +1,7 @@
 use crate::core::hash::Hash;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CommitMeta {
     pub parent_hashes: Vec<Hash>,
     pub tree_hash: Hash,
