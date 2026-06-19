@@ -9,20 +9,6 @@ use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
-struct TeeReader<R: Read, W: Write> {
-    inner: R,
-    writer: W,
-}
-
-impl<R: Read, W: Write> Read for TeeReader<R, W> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        if n > 0 {
-            self.writer.write_all(&buf[..n])?;
-        }
-        Ok(n)
-    }
-}
 
 struct PendingDelta {
     base_hash: Hash,
@@ -130,7 +116,7 @@ fn get_base_payload(
     }
 }
 
-pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<()> {
+pub fn decode_packfile<R: Read + std::marker::Send>(reader_in: &mut R, storage: &Storage) -> Result<()> {
     // 1. Read header
     let mut header = [0u8; 12];
     reader_in
@@ -165,92 +151,133 @@ pub fn decode_packfile<R: Read>(reader_in: &mut R, storage: &Storage) -> Result<
         .progress_chars("#>-"));
     pb.set_message("Downloading & Indexing packfile...");
 
-    let tee = TeeReader {
-        inner: reader_in,
-        writer: file,
-    };
-
-    let mut tracker = PositionTracker {
-        inner: std::io::BufReader::new(tee),
-        pos: 12,
-    };
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(100);
 
     let mut pending_deltas = Vec::new();
     let mut current_pack_index = HashMap::new(); // Hash -> offset
     let mut commit_metas = Vec::new();
 
-    for _i in 0..object_count {
-        pb.inc(1);
-        let offset = tracker.pos;
+    // Spawn a scoped thread so we can safely borrow reader_in and file
+    std::thread::scope(|s| -> Result<()> {
+        s.spawn(|| {
+            let mut buffer = vec![0; 65536];
+            loop {
+                let n = match reader_in.read(&mut buffer) {
+                    Ok(n) => n,
+                    Err(_) => break,
+                };
+                if n == 0 { break; }
+                if file.write_all(&buffer[..n]).is_err() { break; }
+                if tx.send(buffer[..n].to_vec()).is_err() { break; }
+            }
+            let _ = file.sync_all();
+        });
 
-        let (obj_type, _size) = read_object_header(&mut tracker)?;
-
-        if obj_type == 7 {
-            // OBJ_REF_DELTA
-            let mut base_hash_bytes = [0u8; 20];
-            tracker
-                .read_exact(&mut base_hash_bytes)
-                .map_err(|e| GikError::Io(e))?;
-            let base_hash = Hash(base_hash_bytes);
-
-            let mut zlib = ZlibDecoder::new(&mut tracker);
-            let mut delta_data = Vec::new();
-            zlib.read_to_end(&mut delta_data)
-                .map_err(|e| GikError::Io(e))?;
-
-            pending_deltas.push(PendingDelta {
-                base_hash,
-                delta_data,
-                offset,
-            });
-            continue;
-        } else if obj_type == 6 {
-            return Err(GikError::Io(std::io::Error::other(
-                "OBJ_OFS_DELTA not supported yet",
-            )));
+        struct ChannelReader {
+            rx: std::sync::mpsc::Receiver<Vec<u8>>,
+            current_chunk: std::io::Cursor<Vec<u8>>,
         }
 
-        let type_str = match obj_type {
-            1 => "commit",
-            2 => "tree",
-            3 => "blob",
-            _ => {
-                return Err(GikError::Io(std::io::Error::other(format!(
-                    "Unsupported pack object type: {}",
-                    obj_type
-                ))))
+        impl Read for ChannelReader {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = self.current_chunk.read(buf)?;
+                if n > 0 {
+                    return Ok(n);
+                }
+                match self.rx.recv() {
+                    Ok(chunk) => {
+                        self.current_chunk = std::io::Cursor::new(chunk);
+                        self.current_chunk.read(buf)
+                    }
+                    Err(_) => Ok(0),
+                }
             }
+        }
+
+        let cr = ChannelReader {
+            rx,
+            current_chunk: std::io::Cursor::new(Vec::new()),
         };
 
-        let mut zlib = ZlibDecoder::new(&mut tracker);
-        let mut decompressed = Vec::new();
-        zlib.read_to_end(&mut decompressed)
-            .map_err(|e| GikError::Io(e))?;
+        let mut tracker = PositionTracker {
+            inner: std::io::BufReader::new(cr),
+            pos: 12,
+        };
 
-        let header_str = format!("{} {}\0", type_str, decompressed.len());
-        let mut full_obj = header_str.into_bytes();
-        full_obj.extend_from_slice(&decompressed);
+        for _i in 0..object_count {
+            pb.inc(1);
+            let offset = tracker.pos;
 
-        let mut hasher = Sha1::new();
-        hasher.update(&full_obj);
-        let hash_bytes: [u8; 20] = hasher.finalize().into();
-        let hash = Hash::from(hash_bytes);
+            let (obj_type, _size) = read_object_header(&mut tracker)?;
 
-        current_pack_index.insert(hash.clone(), offset);
+            if obj_type == 7 {
+                // OBJ_REF_DELTA
+                let mut base_hash_bytes = [0u8; 20];
+                tracker
+                    .read_exact(&mut base_hash_bytes)
+                    .map_err(|e| GikError::Io(e))?;
+                let base_hash = Hash(base_hash_bytes);
 
-        if obj_type == 1 {
-            let meta = parse_commit_meta(&decompressed)?;
-            commit_metas.push((hash, meta));
+                let mut zlib = ZlibDecoder::new(&mut tracker);
+                let mut delta_data = Vec::new();
+                zlib.read_to_end(&mut delta_data)
+                    .map_err(|e| GikError::Io(e))?;
+
+                pending_deltas.push(PendingDelta {
+                    base_hash,
+                    delta_data,
+                    offset,
+                });
+                continue;
+            } else if obj_type == 6 {
+                return Err(GikError::Io(std::io::Error::other(
+                    "OBJ_OFS_DELTA not supported yet",
+                )));
+            }
+
+            let type_str = match obj_type {
+                1 => "commit",
+                2 => "tree",
+                3 => "blob",
+                _ => {
+                    return Err(GikError::Io(std::io::Error::other(format!(
+                        "Unsupported pack object type: {}",
+                        obj_type
+                    ))))
+                }
+            };
+
+            let mut zlib = ZlibDecoder::new(&mut tracker);
+            let mut decompressed = Vec::new();
+            zlib.read_to_end(&mut decompressed)
+                .map_err(|e| GikError::Io(e))?;
+
+            let header_str = format!("{} {}\0", type_str, decompressed.len());
+            let mut full_obj = header_str.into_bytes();
+            full_obj.extend_from_slice(&decompressed);
+
+            let mut hasher = Sha1::new();
+            hasher.update(&full_obj);
+            let hash_bytes: [u8; 20] = hasher.finalize().into();
+            let hash = Hash::from(hash_bytes);
+
+            current_pack_index.insert(hash.clone(), offset);
+
+            if obj_type == 1 {
+                let meta = parse_commit_meta(&decompressed)?;
+                commit_metas.push((hash, meta));
+            }
         }
-    }
 
-    pb.finish_with_message("Download and Indexing completed.");
+        pb.finish_with_message("Download and Indexing completed.");
 
-    // Drain the rest of the file (trailing checksum, etc)
-    std::io::copy(&mut tracker, &mut std::io::sink()).map_err(|e| GikError::Io(e))?;
+        // Drain the rest of the file (trailing checksum, etc)
+        std::io::copy(&mut tracker, &mut std::io::sink()).map_err(|e| GikError::Io(e))?;
 
-    // Drop tracker to close the file handle before mmap
-    drop(tracker);
+        // Drop tracker to close the file handle before mmap
+        drop(tracker);
+        Ok(())
+    })?; // End of std::thread::scope
 
     let mmap_file = std::fs::File::open(&pack_path).map_err(|e| GikError::Io(e))?;
     let mmap = unsafe { memmap2::MmapOptions::new().map(&mmap_file).map_err(|e| GikError::Io(e))? };

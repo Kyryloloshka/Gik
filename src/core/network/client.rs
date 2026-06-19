@@ -139,7 +139,7 @@ impl GitClient {
         &self,
         want_hash: &Hash,
         have_hash: Option<&Hash>,
-    ) -> Result<Box<dyn std::io::Read>> {
+    ) -> Result<Box<dyn std::io::Read + Send>> {
         let req_url = format!("{}/git-upload-pack", self.url);
         let req = self
             .agent
