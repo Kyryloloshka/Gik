@@ -49,7 +49,7 @@ members = ["."]
 # Global CI/Distribution settings
 cargo-dist-version = "0.19.1"
 ci = ["github"]
-allow-dirty = ["ci"]
+
 
 [profile.dist]
 inherits = "release"
